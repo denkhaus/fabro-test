@@ -79,7 +79,7 @@ digraph Mini {
     evidence [
         label="Evidence",
         shape=parallelogram,
-        script="git --no-pager diff origin/main...HEAD; git --no-pager log --oneline origin/main..HEAD; git --no-pager status --porcelain",
+        script="python3 .fabro/workflows/mini/scripts/evidence.py",
         timeout="1m",
         max_retries=1
     ]
