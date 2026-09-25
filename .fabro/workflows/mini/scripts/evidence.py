@@ -11,6 +11,11 @@ import subprocess
 import sys
 
 def sh(*args: str) -> str:
+    # The engine prepares /workspace as a different UID than the run
+    # user; every git call needs the ownership exemption or git exits
+    # 128 with "detected dubious ownership".
+    if args and args[0] == "git":
+        args = ("git", "-c", "safe.directory=*", *args[1:])
     p = subprocess.run(args, capture_output=True, text=True)
     if p.returncode != 0:
         print(f"evidence: {' '.join(args[:2])} failed: {p.stderr.strip()}", file=sys.stderr)
