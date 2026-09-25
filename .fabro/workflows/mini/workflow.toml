@@ -1,0 +1,21 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# Mini line: cheap non-reasoning model, no reasoning_effort needed
+# (enum is low|medium|high|xhigh|max — glm-4.7 is non-reasoning).
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.run_branch]
+push = true
+
+# Full PR-pipeline facet: engine-side forge ops, squash, auto-merge.
+[run.pull_request]
+enabled = true
+draft = false
+auto_merge = true
+merge_strategy = "squash"
+model = "zai:glm-4.7"

@@ -1,0 +1,10 @@
+_version = 1
+
+[run.environment]
+id = "test-local"
+
+[environments.test-local]
+provider = "docker"
+
+[environments.test-local.image]
+dockerfile = { path = "Dockerfile" }

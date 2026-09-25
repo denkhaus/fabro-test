@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mini planner routing output",
+  "description": "Routing contract (required fields, preferred_next_label restricted to outgoing edge labels) with the seed-claim context_updates. Same Contract::Schema spread as the develop planner (fabro-c5a0 seam): top-level context_updates merge into run context.",
+  "type": "object",
+  "required": [
+    "outcome",
+    "preferred_next_label"
+  ],
+  "properties": {
+    "outcome": {
+      "type": "string"
+    },
+    "preferred_next_label": {
+      "type": "string",
+      "enum": [
+        "Seed claimed",
+        "Tracker empty",
+        "Blocked"
+      ]
+    },
+    "failure_reason": {
+      "type": "string"
+    },
+    "context_updates": {
+      "type": "object",
+      "properties": {
+        "current_seed_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "current_seed_title": {
+          "type": "string"
+        },
+        "current_seed_brief": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
