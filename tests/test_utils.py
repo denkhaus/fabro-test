@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from utils import add, clamp  # noqa: E402
+from utils import add, clamp, slugify  # noqa: E402
 
 
 class AddTests(unittest.TestCase):
@@ -27,6 +27,20 @@ class ClampTests(unittest.TestCase):
 
     def test_clamp_low_equals_high(self):
         self.assertEqual(clamp(7, 5, 5), 5)
+
+
+class SlugifyTests(unittest.TestCase):
+    def test_normal_phrase(self):
+        self.assertEqual(slugify("Hello World"), "hello-world")
+
+    def test_punctuation_runs_collapse_to_one_hyphen(self):
+        self.assertEqual(slugify("Hello,   World!!!"), "hello-world")
+
+    def test_leading_trailing_separators_stripped(self):
+        self.assertEqual(slugify("--Hello World!!"), "hello-world")
+
+    def test_all_separators_yield_empty_string(self):
+        self.assertEqual(slugify(" -- !! -- "), "")
 
 
 if __name__ == "__main__":
