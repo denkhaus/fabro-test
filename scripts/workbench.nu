@@ -136,7 +136,7 @@ def main [] {
     print ($all | table --index false)
     let red = ($all | where not ok)
     if ($red | is-not-empty) {
-        print -e $"WORKBENCH RED: ($red | length) facet(s) failed"
+        print -e $"WORKBENCH RED: ($red | length) facets failed"
         exit 1
     }
     print 'WORKBENCH GREEN — deploy-ready'
