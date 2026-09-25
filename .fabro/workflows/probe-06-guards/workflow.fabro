@@ -7,14 +7,16 @@ digraph Probe06Guards {
         shape=parallelogram,
         script="python3 -c \"import sys; sys.exit(1)\"",
         timeout="20s",
-        max_retries=0
+        max_retries=0,
+        max_visits=10
     ]
     retry [
         label="Retry: also fails",
         shape=parallelogram,
         script="python3 -c \"import sys; sys.exit(1)\"",
         timeout="20s",
-        max_retries=0
+        max_retries=0,
+        max_visits=10
     ]
     start -> flaky [label="Go"]
     flaky -> exit [x.kind="deadlock", label="Deadlock (3 cycles)", condition="nodes.flaky.generation >= 2"]
