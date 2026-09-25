@@ -59,6 +59,6 @@ echo "   server PR path failed (structured-output gap?) -- gh fallback"
 PR_URL="$(gh pr create -R denkhaus/fabro-test --base main --head "$BRANCH" \
     --title "Mini run $RID (bridge publish)" \
     --body "Run $RID work from the run snapshot at final commit $SHA. Bridge-created; engine PR generation unavailable.")"
-gh pr merge --squash --auto
+gh pr merge --squash --auto "$PR_URL"
 "$FABRO" pr link "$RID" "$PR_URL" --server "$SERVER"
 echo "== bridge: done (gh fallback) -- $PR_URL"
