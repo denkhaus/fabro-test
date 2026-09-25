@@ -4,7 +4,7 @@ import re
 
 
 def add(a: int, b: int) -> int:
-    """return the sum"""
+    """Returns the sum of a and b."""
     return a + b
 
 
