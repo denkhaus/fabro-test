@@ -8,7 +8,7 @@ digraph Probe04Runtools {
         output_schema="routing",
         output_retries=2,
         max_visits=3,
-        x.fabro_tools="fabro_run_create,fabro_run_get,fabro_run_wait",
+        x.fabro_tools="fabro_workflow_version_create,fabro_run_create,fabro_run_get,fabro_run_wait",
         x.tools="read_file"
     ]
     check [
