@@ -148,7 +148,7 @@ def seed-ensure []: nothing -> nothing {
     let lines = (open .seeds/issues.jsonl | lines | where {|l| ($l | str trim) != ''})
     let kept = ($lines | where {|l| (($l | from json | get id) != 'fabro-test-9001')})
     let out = ($kept | append ($row | to json -r) | str join '\n') + '\n'
-    $out | save .seeds/issues.jsonl --raw
+    $out | save .seeds/issues.jsonl --raw --force
     # (c) commit + push the deterministic prestate
     let _ = (do { git add bench/canonical.py tests/test_canonical.py .seeds/issues.jsonl } | complete)
     let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
