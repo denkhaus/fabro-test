@@ -1,0 +1,23 @@
+digraph Probe10Skills {
+    graph [goal="A loaded skill changes the agent output format deterministically", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    agent [
+        label="Agent: apply the bench-style skill",
+        prompt="@prompts/agent.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3
+    ]
+    check [
+        label="Check: marker in context",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-10-skills/scripts/check.py",
+        stdin_source="skill_marker",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> agent [label="Go"]
+    agent -> check [label="Done"]
+    check -> exit [label="Marker ok"]
+}

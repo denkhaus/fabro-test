@@ -1,0 +1,16 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.agent]
+skills = [".fabro/skills"]
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
