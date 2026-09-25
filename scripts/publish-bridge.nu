@@ -67,7 +67,7 @@ def main [run_id: string] {
     }
     print $"   server PR path failed — gh fallback: (($created.stderr | str trim) | str substring 0..120)"
 
-    let title = $"Mini run ($run_id) (bridge publish)"
+    let title = $"Mini run ($run_id) bridge publish"
     let body = $"Run ($run_id) work from the run snapshot at final commit ($sha). Bridge-created; engine PR generation unavailable."
     let pr = (ok (do { ^gh pr create -R $REPO --base main --head $"fabro/run/($run_id)" --title $title --body $body } | complete) 'gh pr create')
     let pr_url = ($pr.stdout | str trim)

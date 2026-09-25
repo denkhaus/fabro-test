@@ -27,7 +27,7 @@ def clean-runs []: nothing -> nothing {
         let body = ({ run_ids: $ids, force: true } | to json -r)
         let _ = (http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/delete" $body)
     }
-    print $"== workbench: board cleaned ($rounds - 1) batch(es)"
+    print $"== workbench: board cleaned after ($rounds - 1) batches"
 }
 
 # Answer every pending HITL question by kind until the run is terminal.
@@ -173,7 +173,7 @@ def main [] {
         [probe-08-interview succeeded]
         [probe-09-envelope-deny failed]
     ]
-    print $"== workbench: ($probes | length) probes (label bench=($bench_id))"
+    print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
     mut rows = []
     for p in $probes {
         print $"-- ($p.name)"
