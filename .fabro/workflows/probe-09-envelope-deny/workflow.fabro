@@ -1,0 +1,16 @@
+digraph Probe09Deny {
+    graph [goal="An out-of-scope write fails the stage with an envelope violation", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    writer [
+        label="Writer: attempts forbidden path",
+        prompt="@prompts/writer.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.tools="read_file,write_file,glob,grep",
+        x.fs_write="allowed/probe.txt"
+    ]
+    start -> writer [label="Go"]
+    writer -> exit [label="Written"]
+}

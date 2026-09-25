@@ -17,11 +17,13 @@ Host-Skripte in nu. Budget: < 15 min und < 1 EUR pro Workbench-Lauf.
 | 05 | Sandbox-Hooks (stage_complete) | probe-05-hooks | Journal-Eintrag im Run-Workspace | neu |
 | 06 | Cycle-Guards (generation >= 3 -> Deadlock) | probe-06-guards | Run terminiert als Deadlock, nicht Endlosschleife | neu |
 | 07 | Artifacts ([run.artifacts] include) | probe-07-artifacts | artifact.collected-Record in den Run-Events | neu |
-| 08 | Interview/Human-Node + API-Antwort | probe-08-interview | Frage gestellt, beantwortet, Run gruen | fabro-dbb4 (Vorbild) |
-| 09 | Seeds-Loop komplett (mini + Publish-Bridge) | mini | Seed implementiert, PR squash-gemerged, Tracker zu | PRs #1/#2 |
+| 08 | HITL/Interview: alle 5 Fragetypen (yes_no, confirmation, multiple_choice, multi_select, freeform) | probe-08-interview | jede Frage via API beantwortet, Run gruen | fabro-dbb4 (Vorbild) |
+| 09a | Seeds-Loop komplett (mini + Publish-Bridge) | mini | Seed implementiert, PR squash-gemerged, Tracker zu | PRs #1/#2 |
+| 09b | Write-Envelope verweigert ausserhalb des Scopes (Stage failt hart) | probe-09-envelope-deny | Run failed mit 'envelope violation' | Run 01M3D4FAS6WX0M |
 | P1 | Server-API: health/models/environments | workbench (nu) | 200 + zai configured + env-Registry | smoke |
 | P2 | Web: SPA-Index + Asset | workbench (nu) | Index referenziert Asset | smoke |
 | P3 | Completions-Smoke (echter LLM-Call) | workbench (nu) | 1-Token-Antwort | neu |
+| 03* | x.tools-Allowlist — BEKANNT ROT bis fabro-1a41 (Regression) | probe-03-tools | write_file muss verweigert werden | Run 01M3D6JZAX1YHB |
 
 Pflege: neue Produkt-Bugs (rootprint-Fehlerbilder von mirtuell) landen als
 Zeile hier + Probe + fabro-Seed, BEVOR irgendein Deploy laeuft.

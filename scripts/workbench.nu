@@ -30,8 +30,46 @@ def platform-checks []: nothing -> list<record> {
     $rows
 }
 
-# -- one probe run --------------------------------------------------------
-def probe-run [name: string, expect: string]: nothing -> record {
+    # Answer every pending HITL question by kind until the run leaves the gate.
+    def hitl-answer [run_id: string]: nothing -> bool {
+        for _ in 1..120 {
+            let qs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/questions" | get -o data | default [])
+            let pending = ($qs | where {|q| (($q | get -o status | default 'pending') == 'pending')})
+            if ($pending | is-empty) {
+                let run = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)")
+                let st = ($run | get -o lifecycle | get -o status | get -o kind | default '')
+                if $st in ['succeeded' 'failed'] { return true }
+                sleep 2sec
+                continue
+            }
+            let q = ($pending | first)
+            let qid = ($q | get -o id | default '')
+            let kind = ($q | get -o question_type | default ($q | get -o kind | default ''))
+            if ($qid | is-empty) { return false }
+            let opts = ($q | get -o options | default [] | get -o option_key | default [])
+            let body = if $kind in ['yes_no' 'confirmation'] {
+                '{"kind": "yes"}'
+            } else if $kind == 'multiple_choice' {
+                if ($opts | is-empty) { '{"kind": "selected", "option_key": "G"}' } else {
+                    ({ kind: 'selected', option_key: ($opts | first) } | to json -r)
+                }
+            } else if $kind == 'multi_select' {
+                if ($opts | is-empty) { '{"kind": "multi_selected", "option_keys": ["G"]}' } else {
+                    ({ kind: 'multi_selected', option_keys: [($opts | first)] } | to json -r)
+                }
+            } else {
+                '{"kind": "text", "text": "workbench auto-answer"}'
+            }
+            let _ = (try {
+                http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/($run_id)/questions/($qid)/answer" $body
+            } catch { null })
+            sleep 1sec
+        }
+        false
+    }
+
+    # -- one probe run (helper above) ----------------------------------------
+    def probe-run [name: string, expect: string]: nothing -> record {
     let t0 = (date now)
     let created = (do { ^$FABRO create $name --environment test-local --json --server $SERVER } | complete)
     if $created.exit_code != 0 {
@@ -76,7 +114,7 @@ def probe-run [name: string, expect: string]: nothing -> record {
     # extra assertions
     if $ok and $name == 'probe-04-runtools' {
         # child run must exist and be terminal
-        let children = (http get --headers (auth-header) $"($SERVER)/api/v1/runs?limit=10" | get data | where parent_id == $run_id)
+        let children = (http get --headers (auth-header) $"($SERVER)/api/v1/runs?limit=10" | get data | where {|r| (($r | get -o parent_id | default '') == $run_id)})
         let child_ok = ($children | length) > 0
         return {facet: $name, ok: $child_ok, detail: ($detail + $" | children=($children | length)" )}
     }

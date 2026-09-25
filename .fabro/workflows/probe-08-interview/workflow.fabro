@@ -1,21 +1,38 @@
 digraph Probe08Interview {
-    graph [goal="A human gate is asked, answered via API, and routed", default_max_retries=0, stall_timeout="5m"]
+    graph [goal="All five human question types are asked, answered via API, and routed", default_max_retries=0, stall_timeout="8m"]
     start [shape=Mdiamond]
     exit  [shape=Msquare]
-    gate [
-        shape=hexagon,
-        label="Approve the completion of this interview probe?",
-        question_type="yes_no"
+    yes_no [
+        shape=hexagon, label="Is the HITL facet wired?", question_type="yes_no"
+    ]
+    confirmation [
+        shape=hexagon, label="Confirm the structured questions follow.", question_type="confirmation"
+    ]
+    multiple_choice [
+        shape=hexagon, label="Which scope does this probe cover?", question_type="multiple_choice"
+    ]
+    multi_select [
+        shape=hexagon, label="Which gates should keep firing?", question_type="multi_select"
+    ]
+    freeform [
+        shape=hexagon, label="One sentence of freeform context.", question_type="freeform"
     ]
     confirm [
-        label="Confirm: gate answered",
+        label="Confirm: all gates answered",
         shape=parallelogram,
-        script="python3 -c \"print('interview probe confirmed')\"",
+        script="python3 -c \"print('hitl probe confirmed')\"",
         timeout="30s",
         max_retries=0
     ]
-    start -> gate
-    gate -> confirm [label="[Y] Yes"]
-    gate -> confirm [label="[N] No"]
+    start -> yes_no
+    yes_no -> confirmation [label="[Y] Yes"]
+    yes_no -> confirmation [label="[N] No"]
+    confirmation -> multiple_choice [label="[Y] Continue"]
+    confirmation -> multiple_choice [label="[N] Stop"]
+    multiple_choice -> multi_select [label="[G] Gates"]
+    multiple_choice -> multi_select [label="[R] Routing"]
+    multi_select -> freeform [label="[G] Continue"]
+    multi_select -> freeform [label="[R] Continue"]
+    freeform -> confirm [label="Done"]
     confirm -> exit [label="Done"]
 }
