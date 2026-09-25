@@ -82,27 +82,13 @@ def platform-checks []: nothing -> list<record> {
         return {facet: $name, ok: false, detail: ($started.stderr | str trim | str substring 0..140)}
     }
 
-    # interview probe: answer the pending yes_no question via API
-    if $name == 'probe-08-interview' {
-        mut answered = false
-        for _ in 1..60 {
-            let run = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)")
-            let q = ($run | get -o current_question | default null)
-            if $q != null {
-                let qid = ($run | get -o current_question | get -o question | get -o id | get -o 0 | default ($q | get -o id | default ''))
-                if ($qid | is-empty) { break }
-                let post = (try {
-                    http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/($run_id)/questions/($qid)/answer" '{"kind": "yes"}'
-                } catch { null })
-                $answered = ($post != null)
-                break
-            }
-            sleep 2sec
+    # interview probe: answer every pending HITL question by kind
+        if $name == 'probe-08-interview' {
+            let answered = (hitl-answer $run_id)
+            if not $answered { return {facet: $name, ok: false, detail: 'hitl questions not fully answered'} }
         }
-        if not $answered { return {facet: $name, ok: false, detail: 'question not answered'} }
-    }
 
-    let waited = (do { ^$FABRO wait $run_id --json --server $SERVER } | complete)
+        let waited = (do { ^$FABRO wait $run_id --json --server $SERVER } | complete)
     let info = (try { $waited.stdout | from json } catch { null })
     if $info == null { return {facet: $name, ok: false, detail: 'no terminal json'} }
     let status = ($info | get -o status | default '?')
@@ -124,10 +110,9 @@ def platform-checks []: nothing -> list<record> {
         return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)" )}
     }
     if $ok and $name == 'probe-06-guards' {
-        let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
-        let life = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'run.lifecycle')} | get -o item.record.transition)
-        let deadlocked = ($life | last | default '' | str lowercase | str contains 'deadlock')
-        return {facet: $name, ok: $deadlocked, detail: ($detail + ' deadlock-lifecycle=' + ($deadlocked | into string)) }
+        let reason = ($info | get -o reason | default '' | str lowercase)
+        let deadlocked = ($reason | str contains 'deadlock')
+        return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }

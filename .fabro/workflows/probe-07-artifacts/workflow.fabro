@@ -5,7 +5,7 @@ digraph Probe07Artifacts {
     emit [
         label="Emit: write out/report.txt",
         shape=parallelogram,
-        script="python3 -c \"from pathlib import Path; Path('out').mkdir(exist_ok=True); Path('out/report.txt').write_text('probe-07 artifact payload\n')\"",
+        script="python3 .fabro/workflows/probe-07-artifacts/scripts/emit.py",
         timeout="30s",
         max_retries=0
     ]

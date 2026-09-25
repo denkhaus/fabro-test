@@ -29,21 +29,18 @@ def auth-header []: nothing -> record {
 }
 
 def run-diff-head-sha [run_id: string] {
-    mut after = null
-    for _ in 1..12 {
-        let url = if $after == null {
-            $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000"
-        } else {
-            $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000&after=($after)"
+        mut after = 0
+        for _ in 1..12 {
+            let url = $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000&after=($after)"
+            let page = (http get --headers (auth-header) $url | get -o data | default [])
+            if ($page | is-empty) { break }
+            $after = ($page | last | get stream_seq)
+            let hit = ($page | where {|e| (($e | get -o item.record.kind | default '') == 'run.diff')} | first | default null)
+            let sha = if $hit == null { '' } else { ($hit | get -o item.record.head_sha | default '') }
+            if ($sha | is-not-empty) { return $sha }
         }
-        let page = (http get --headers (auth-header) $url | get -o data | default [])
-        if ($page | is-empty) { break }
-        $after = ($page | last | get stream_seq)
-        let hit = ($page | where item.record.kind == run.diff | select -o 0 | get -o item.record.head_sha)
-        if ($hit | is-not-empty) { return ($hit | first) }
+        fail 'no run.diff record in run events'
     }
-    fail 'no run.diff record in run events'
-}
 
 def main [run_id: string] {
     let sha = (run-diff-head-sha $run_id)
@@ -53,7 +50,7 @@ def main [run_id: string] {
     let snap = $"/storage/scratch/($day)-($run_id)/petri/snapshots/invocation-0-scope-0.git"
     let tmpdir = (mktemp --directory)
     let tmpgit = ($tmpdir | path join 'snap.git')
-    ok (do { docker cp $"fabro-fabro-1:($snap)" $tmpgit } | complete) 'docker cp snapshot'
+    ok (do { docker cp $"fabro-lokal:($snap)" $tmpgit } | complete) 'docker cp snapshot'
 
     print $"== bridge: pushing exact final commit as fabro/run/($run_id)"
     ok (do { git --git-dir $tmpgit push $ORIGIN $"($sha):refs/heads/fabro/run/($run_id)" } | complete) 'snapshot push'

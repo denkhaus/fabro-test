@@ -33,6 +33,6 @@ digraph Probe08Interview {
     multiple_choice -> multi_select [label="[R] Routing"]
     multi_select -> freeform [label="[G] Continue"]
     multi_select -> freeform [label="[R] Continue"]
-    freeform -> confirm [label="Done"]
+    freeform -> confirm [freeform=true]
     confirm -> exit [label="Done"]
 }
