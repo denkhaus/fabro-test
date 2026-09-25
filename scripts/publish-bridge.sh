@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Publish bridge for the mini line (until the engine publish step lands):
-# reconstruct the run branch from base_sha + stored patch, push it, open
-# a PR, squash-merge it, and link the PR to the run.
+# Publish bridge v2 (until the engine publish step lands):
+# 1. copy the run's snapshot repo out of the server volume (docker cp),
+# 2. push the EXACT final commit as fabro/run/<id> (verify_remote_head
+#    passes -> the server's own PR path works),
+# 3. try `fabro pr create` (LLM title); fall back to gh PR + auto-merge
+#    when structured output fails (known zai gap),
+# 4. link the PR to the run when the gh fallback ran.
 # Usage: scripts/publish-bridge.sh <RUN_ID>
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -9,35 +13,39 @@ cd "$(dirname "$0")/.."
 RID="${1:?usage: publish-bridge.sh <RUN_ID>}"
 BRANCH="fabro/run/$RID"
 SERVER="${FABRO_SERVER:-http://127.0.0.1:32276}"
+FABRO="${FABRO:-$HOME/.fabro/bin/fabro}"
 
-echo "== bridge: fetching base+patch for $RID"
-OUT="$(python3 scripts/bridge_fetch.py "$RID")"
-BASE="$(printf '%s\n' "$OUT" | head -1)"
-PATCH="$(printf '%s\n' "$OUT" | tail -n +2)"
-echo "   base=$BASE patch_bytes=${#PATCH}"
+# Final commit from the run.diff record (paginated event walk).
+SHA="$("$FABRO" events "$RID" --json --server "$SERVER" \
+    | python3 -c 'import json,sys
+for e in json.load(sys.stdin).get("data", []):
+    r = (e.get("item") or {}).get("record") or {}
+    if r.get("kind") == "run.diff":
+        print(r["head_sha"]); break
+else:
+    sys.exit("no run.diff record")')"
+echo "== bridge: run $RID final commit $SHA"
 
-git fetch origin --quiet
-git rev-parse --verify "$BASE^{commit}" >/dev/null
+SNAP="/storage/scratch/$(date -u +%Y%m%d)-$RID/petri/snapshots/invocation-0-scope-0.git"
+TMP="$(mktemp -d)/snap.git"
+docker cp "fabro-fabro-1:$SNAP" "$TMP" >/dev/null
+git --git-dir="$TMP" cat-file -t "$SHA^{commit}" >/dev/null
 
-echo "== bridge: reconstructing $BRANCH"
-git checkout --quiet -B "bridge/$RID" "$BASE"
-printf '%s\n' "$PATCH" | git apply --index -
-git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com \
-    commit --quiet -m "fabro($RID): mini bridge publish" -m "Fabro-Run: $RID"
-git push --quiet origin "HEAD:refs/heads/$BRANCH"
-git checkout --quiet main
-git branch --quiet -D "bridge/$RID"
+echo "== bridge: pushing exact final commit as $BRANCH"
+git --git-dir="$TMP" push https://github.com/denkhaus/fabro-test.git \
+    "$SHA:refs/heads/$BRANCH"
+rm -rf "$(dirname "$TMP")"
 
-echo "== bridge: opening PR"
+echo "== bridge: creating PR (server path first)"
+if "$FABRO" pr create "$RID" --model "${PR_MODEL:-glm-4.7}" --server "$SERVER"; then
+    echo "== bridge: done (engine-created PR)"
+    exit 0
+fi
+echo "   server PR path failed (structured-output gap?) -- gh fallback"
+
 PR_URL="$(gh pr create -R denkhaus/fabro-test --base main --head "$BRANCH" \
     --title "Mini run $RID (bridge publish)" \
-    --body "Reconstructed from run $RID checkpoint (bridge until engine publish lands). Seed work + tracker close.")"
-
-echo "== bridge: squash-merging $PR_URL"
-gh pr merge -R denkhaus/fabro-test --squash --delete-branch "$PR_URL"
-
-echo "== bridge: linking PR to run"
-~/.fabro/bin/fabro pr link "$RID" "$PR_URL" --server "$SERVER"
-
-git pull --ff-only --quiet
-echo "== bridge: done — main updated, PR linked: $PR_URL"
+    --body "Run $RID work from the run snapshot at final commit $SHA. Bridge-created; engine PR generation unavailable.")"
+gh pr merge --squash --auto
+"$FABRO" pr link "$RID" "$PR_URL" --server "$SERVER"
+echo "== bridge: done (gh fallback) -- $PR_URL"
