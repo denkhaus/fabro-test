@@ -6,3 +6,8 @@ graph = "workflow.fabro"
 [run.model]
 provider = "zai"
 name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

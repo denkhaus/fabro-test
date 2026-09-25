@@ -5,3 +5,8 @@ graph = "workflow.fabro"
 
 [run.artifacts]
 include = ["out/**"]
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

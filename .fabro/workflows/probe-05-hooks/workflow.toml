@@ -10,3 +10,8 @@ script = "python3 .fabro/workflows/probe-05-hooks/scripts/journal.py"
 blocking = false
 timeout = "10s"
 sandbox = true
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

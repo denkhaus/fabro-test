@@ -9,3 +9,8 @@ name = "glm-4.7"
 
 [run.agent]
 fabro_tools = true
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
