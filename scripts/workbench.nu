@@ -82,12 +82,12 @@ def probe-run [name: string, expect: string]: nothing -> record {
     }
     if $ok and $name == 'probe-07-artifacts' {
         let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
-        let collected = ($evs | where item.record.kind? == 'artifact.collected' | length)
+        let collected = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'artifact.collected')} | length)
         return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)" )}
     }
     if $ok and $name == 'probe-06-guards' {
         let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
-        let life = ($evs | where item.record.kind? == 'run.lifecycle' | get item.record.transition)
+        let life = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'run.lifecycle')} | get -o item.record.transition)
         let deadlocked = ($life | last | default '' | str lowercase | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' deadlock-lifecycle=' + ($deadlocked | into string)) }
     }
