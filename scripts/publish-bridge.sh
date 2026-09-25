@@ -15,15 +15,28 @@ BRANCH="fabro/run/$RID"
 SERVER="${FABRO_SERVER:-http://127.0.0.1:32276}"
 FABRO="${FABRO:-$HOME/.fabro/bin/fabro}"
 
-# Final commit from the run.diff record (paginated event walk).
-SHA="$("$FABRO" events "$RID" --json --server "$SERVER" \
-    | python3 -c 'import json,sys
-for e in json.load(sys.stdin).get("data", []):
-    r = (e.get("item") or {}).get("record") or {}
-    if r.get("kind") == "run.diff":
-        print(r["head_sha"]); break
-else:
-    sys.exit("no run.diff record")')"
+# Final commit from the run.diff record (paginated event walk via API).
+SHA="$(python3 - "$RID" <<'PYEOF'
+import json, sys, urllib.request
+from pathlib import Path
+rid = sys.argv[1]
+server = "http://127.0.0.1:32276"
+token = json.loads((Path.home() / ".fabro/auth.json").read_text())["servers"][server]["token"]
+after = None
+for _ in range(12):
+    url = f"{server}/api/v1/runs/{rid}/events?limit=1000" + (f"&after={after}" if after else "")
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    data = json.load(urllib.request.urlopen(req)).get("data", [])
+    if not data:
+        break
+    after = data[-1]["stream_seq"]
+    for e in data:
+        r = (e.get("item") or {}).get("record") or {}
+        if r.get("kind") == "run.diff":
+            print(r["head_sha"]); sys.exit(0)
+sys.exit("no run.diff record in run events")
+PYEOF
+)"
 echo "== bridge: run $RID final commit $SHA"
 
 SNAP="/storage/scratch/$(date -u +%Y%m%d)-$RID/petri/snapshots/invocation-0-scope-0.git"
