@@ -127,30 +127,33 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     {facet: $name, ok: $ok, detail: $detail}
 }
 
-# The mini loop consumes one seed per bench; when the tracker is empty,
-# append the next pool seed to .seeds/issues.jsonl and push.
-def seed-refill []: nothing -> nothing {
-    let rows = (open .seeds/issues.jsonl | lines | where {|l| ($l | str trim) != ''} | each {|l| $l | from json})
-    if ($rows | where status == open | length) > 0 { return }
-    let pool = [
-        [id title desc];
-        [fabro-test-0101 'Add a mean(values) function to src/utils.py' 'Add mean(values) returning the arithmetic mean of a non-empty list. Tests: ints, floats, single element.']
-        [fabro-test-0102 'Add a capitalize_words(text) helper to src/utils.py' 'Capitalize every whitespace-separated word. Tests: normal phrase, multiple spaces, empty string.']
-        [fabro-test-0103 'Add a reverse_list(values) helper to src/utils.py' 'Return a new reversed list, input untouched. Tests: ints, empty list, input-immutability.']
-        [fabro-test-0104 'Add a count_vowels(text) helper to src/utils.py' 'Count a/e/i/o/u case-insensitively. Tests: mixed case, no vowels, empty string.']
-        [fabro-test-0105 'Add a max_abs(values) helper to src/utils.py' 'Return the value with the largest absolute value. Tests: negatives, ties, single element.']
-        [fabro-test-0106 'Add a flatten_once(lists) helper to src/utils.py' 'Flatten exactly one level of nesting. Tests: mixed depths, empty lists.']
-    ]
-    let used = ($rows | get id)
-    let next = ($pool | where {|p| ($p.id not-in $used)} | first | default null)
-    if $next == null { return }
+# The mini loop runs THE canonical bench seed: fixed wording, fixed prestate.
+# Before every bench: reset bench/canonical.py + tests to the tracked stub,
+# then ensure the seed row is open with the exact same text — runs stay
+# comparable across benches and upstream merges (user directive).
+def seed-ensure []: nothing -> nothing {
+    # (a) reset the canonical files to the prestate copies
+    cp .fabro/workbench/prestate/canonical.py bench/canonical.py
+    cp .fabro/workbench/prestate/test_canonical.py tests/test_canonical.py
+    # (b) rewrite the tracker row: closed -> open, missing -> append (fixed id+wording)
     let now = (date now | format date '%Y-%m-%dT%H:%M:%S.000Z')
-    let row = ({ id: $next.id, title: $next.title, status: 'open', type: 'task', priority: 1, createdAt: $now, updatedAt: $now, description: $next.desc } | to json -r)
-    ($row + '\n') | save --append .seeds/issues.jsonl --raw
-    let _ = (do { git add .seeds/issues.jsonl } | complete)
-    let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $"seeds: refill ($next.id) for the workbench line" --quiet } | complete)
+    let row = { id: 'fabro-test-9001'
+        title: 'Implement canonical_mark() in bench/canonical.py'
+        status: 'open'
+        type: 'task'
+        priority: 1
+        createdAt: $now
+        updatedAt: $now
+        description: 'Replace the NotImplementedError stub in bench/canonical.py so canonical_mark() returns the exact string canonical-ok-9001. Add unit tests in tests/test_canonical.py covering the return value (the tracked prestate test already expects it). Acceptance: python3 -m unittest discover -s tests is green and the stub is gone.' }
+    let lines = (open .seeds/issues.jsonl | lines | where {|l| ($l | str trim) != ''})
+    let kept = ($lines | where {|l| (($l | from json | get id) != 'fabro-test-9001')})
+    let out = ($kept | append ($row | to json -r) | str join '\n') + '\n'
+    $out | save .seeds/issues.jsonl --raw
+    # (c) commit + push the deterministic prestate
+    let _ = (do { git add bench/canonical.py tests/test_canonical.py .seeds/issues.jsonl } | complete)
+    let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
     let _ = (do { git push --quiet } | complete)
-    print $"== workbench: seed refilled ($next.id)"
+    print '== workbench: canonical seed ensured (fabro-test-9001, fixed wording)'
 }
 
 def main [] {
@@ -181,7 +184,7 @@ def main [] {
     }
 
     print '== workbench: mini integration (seed loop + publish)'
-    seed-refill
+    seed-ensure
     let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment test-local --json --server $SERVER } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
