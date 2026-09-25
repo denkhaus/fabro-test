@@ -6,7 +6,7 @@ const SERVER = 'http://127.0.0.1:32276'
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
 def auth-header []: nothing -> record {
-    let token = (open ~/.fabro/auth.json | get servers $SERVER | get token)
+    let token = (open ~/.fabro/auth.json | get servers | get -o $SERVER | get -o token | default '')
     { Authorization: $"Bearer ($token)" }
 }
 
@@ -88,7 +88,7 @@ def probe-run [name: string, expect: string]: nothing -> record {
     if $ok and $name == 'probe-06-guards' {
         let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
         let life = ($evs | where item.record.kind == run.lifecycle | get item.record.transition)
-        let deadlocked = ($life | last | default '' | str downcase | str contains 'deadlock')
+        let deadlocked = ($life | last | default '' | str lowercase | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' deadlock-lifecycle=' + ($deadlocked | into string)) }
     }
     {facet: $name, ok: $ok, detail: $detail}

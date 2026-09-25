@@ -24,7 +24,7 @@ def ok [result: record, what: string]: nothing -> record {
 }
 
 def auth-header []: nothing -> record {
-    let token = (open ~/.fabro/auth.json | get servers $SERVER | get token)
+    let token = (open ~/.fabro/auth.json | get servers | get -o $SERVER | get -o token | default '')
     { Authorization: $"Bearer ($token)" }
 }
 
