@@ -7,7 +7,9 @@ Use the Fabro run tools in exactly this order:
 2. `fabro_run_create` with one run spec:
    `workflow_version_id` = the id from step 1,
    `environment` = `test-local`,
-   `start` = true.
+   `start` = true,
+   `target` = { "git": { "repo": "denkhaus/fabro-test", "branch": "main" } }
+   (without the target the child records as repository "unknown").
 3. Wait for the child run to reach a terminal state with `fabro_run_wait`
    (or poll `fabro_run_get`). The child is one command stage — seconds.
 4. Verify the child's terminal status is succeeded.
