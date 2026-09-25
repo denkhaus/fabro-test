@@ -1,0 +1,7 @@
+digraph Probe04Child {
+    graph [goal="One command stage", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    say [shape=parallelogram, script="python3 -c \"print('child-alive')\"", timeout="30s", max_retries=0]
+    start -> say -> exit
+}

@@ -1,0 +1,23 @@
+digraph Probe06Guards {
+    graph [goal="A permanently failing loop terminates via the generation deadlock guard, never hangs", default_max_retries=0, stall_timeout="5m", max_node_visits=20]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    flaky [
+        label="Flaky: always fails",
+        shape=parallelogram,
+        script="python3 -c \"import sys; sys.exit(1)\"",
+        timeout="20s",
+        max_retries=0
+    ]
+    retry [
+        label="Retry: also fails",
+        shape=parallelogram,
+        script="python3 -c \"import sys; sys.exit(1)\"",
+        timeout="20s",
+        max_retries=0
+    ]
+    start -> flaky [label="Go"]
+    flaky -> exit [x.kind="deadlock", label="Deadlock (3 cycles)", condition="nodes.flaky.generation >= 3"]
+    flaky -> retry [label="Fail"]
+    retry -> flaky [label="Fail again"]
+}

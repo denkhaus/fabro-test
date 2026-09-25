@@ -1,0 +1,23 @@
+digraph Probe01Schema {
+    graph [goal="Schema context_updates reach a stdin_source consumer", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    ctx [
+        label="Ctx: emit probe_key via schema",
+        prompt="@prompts/ctx.md",
+        output_schema="@schemas/ctx.schema.json",
+        output_retries=2,
+        max_visits=3
+    ]
+    check [
+        label="Stdin: reads probe_key",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-01-schema/scripts/check.py",
+        stdin_source="probe_key",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> ctx [label="Key out"]
+    ctx -> check [label="Key out"]
+    check -> exit [label="Value ok"]
+}

@@ -1,0 +1,11 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.agent]
+fabro_tools = true

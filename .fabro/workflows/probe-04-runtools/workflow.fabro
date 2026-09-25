@@ -1,0 +1,25 @@
+digraph Probe04Runtools {
+    graph [goal="Create a child run via run tools and wait for its success", default_max_retries=0, stall_timeout="8m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    parent [
+        label="Parent: fabro_run_create + wait",
+        prompt="@prompts/parent.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.fabro_tools="fabro_run_create,fabro_run_get,fabro_run_wait",
+        x.tools="read_file"
+    ]
+    check [
+        label="Claim check: child id present",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-04-runtools/scripts/check.py",
+        stdin_source="child_run_id",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> parent [label="Go"]
+    parent -> check [label="Child done"]
+    check -> exit [label="Child id present"]
+}

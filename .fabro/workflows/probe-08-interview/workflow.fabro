@@ -1,0 +1,21 @@
+digraph Probe08Interview {
+    graph [goal="A human gate is asked, answered via API, and routed", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    gate [
+        shape=hexagon,
+        label="Approve the completion of this interview probe?",
+        question_type="yes_no"
+    ]
+    confirm [
+        label="Confirm: gate answered",
+        shape=parallelogram,
+        script="python3 -c \"print('interview probe confirmed')\"",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> gate
+    gate -> confirm [label="[Y] Yes"]
+    gate -> confirm [label="[N] No"]
+    confirm -> exit [label="Done"]
+}

@@ -1,0 +1,25 @@
+digraph Probe03Tools {
+    graph [goal="Read-only allowlist: reads work, writes are denied", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    reader [
+        label="Reader: read_file only",
+        prompt="@prompts/reader.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.tools="read_file",
+        x.fs_write=""
+    ]
+    verify [
+        label="Verify: no file written",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-03-tools/scripts/verify.py",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> reader [label="Go"]
+    reader -> verify [label="Read"]
+    verify -> exit [label="Deny ok"]
+}

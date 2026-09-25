@@ -1,0 +1,22 @@
+digraph Probe07Artifacts {
+    graph [goal="Artifacts under the include root are collected", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    emit [
+        label="Emit: write out/report.txt",
+        shape=parallelogram,
+        script="python3 -c \"from pathlib import Path; Path('out').mkdir(exist_ok=True); Path('out/report.txt').write_text('probe-07 artifact payload\n')\"",
+        timeout="30s",
+        max_retries=0
+    ]
+    verify [
+        label="Verify: file present",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-07-artifacts/scripts/verify.py",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> emit -> verify
+    verify -> exit [label="Artifact ok"]
+}

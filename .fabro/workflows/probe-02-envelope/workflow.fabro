@@ -1,0 +1,25 @@
+digraph Probe02Envelope {
+    graph [goal="Pinned fs_write admits the allowed path and denies the forbidden one", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    writer [
+        label="Writer: pinned fs_write",
+        prompt="@prompts/writer.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.tools="read_file,write_file,glob,grep",
+        x.fs_write="allowed/probe.txt"
+    ]
+    verify [
+        label="Verify: allowed present, forbidden absent",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-02-envelope/scripts/verify.py",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> writer [label="Go"]
+    writer -> verify [label="Written"]
+    verify -> exit [label="Envelope ok"]
+}

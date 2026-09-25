@@ -1,0 +1,22 @@
+digraph Probe05Hooks {
+    graph [goal="A sandbox stage_complete hook leaves a journal entry", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    emit [
+        label="Emit: trigger the hook",
+        shape=parallelogram,
+        script="python3 -c \"print('hook trigger')\"",
+        timeout="30s",
+        max_retries=0
+    ]
+    verify [
+        label="Verify: journal written",
+        shape=parallelogram,
+        script="python3 .fabro/workflows/probe-05-hooks/scripts/verify.py",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> emit -> verify
+    verify -> exit [label="Journal ok"]
+}
