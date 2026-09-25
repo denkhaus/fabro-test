@@ -11,3 +11,8 @@ name = "glm-4.7"
 provider = "github"
 owner = "denkhaus"
 repository = "fabro-test"
+
+# Children created by run tools carry a worker principal — approval
+# would park forever (only users may approve).
+[run.execution]
+approval = "auto"
