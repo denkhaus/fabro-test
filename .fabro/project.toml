@@ -1,5 +1,15 @@
 _version = 1
 
+# Publish settings live PROJECT-side: the runner ignores workflow.toml's
+# [run.run_branch]/[run.pull_request] (admission warning), but the platform's
+# run-end publish path reads the checkout's project config — same layout as
+# the fabro repo itself (project.toml [run.pull_request] + workflow.toml copy).
+[run.pull_request]
+enabled = true
+draft = false
+auto_merge = true
+merge_strategy = "squash"
+
 # Placement is server-managed (fabro-03ef): the server-side environment
 # registry holds `test-local` (docker, buildpack-deps:noble).
 # Runs pin it via `--environment test-local` (scripts/run-mini.sh).
