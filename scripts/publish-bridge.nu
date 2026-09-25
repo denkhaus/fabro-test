@@ -46,8 +46,11 @@ def main [run_id: string] {
     let sha = (run-diff-head-sha $run_id)
     print $"== bridge: run ($run_id) final commit ($sha)"
 
-    let day = (date now | format date '%Y%m%d')
-    let snap = $"/storage/scratch/($day)-($run_id)/petri/snapshots/invocation-0-scope-0.git"
+    # Do NOT guess the date (UTC/local midnight drift): resolve the scratch
+    # dir by run id inside the container.
+    let dir = (do { docker exec fabro-lokal sh -c $"ls -d /storage/scratch/*-($run_id) 2>/dev/null | head -1" } | complete | get stdout | str trim)
+    if ($dir | is-empty) { fail $"no scratch dir for ($run_id)" }
+    let snap = $"($dir)/petri/snapshots/invocation-0-scope-0.git"
     let tmpdir = (mktemp --directory)
     let tmpgit = ($tmpdir | path join 'snap.git')
     ok (do { docker cp $"fabro-lokal:($snap)" $tmpgit } | complete) 'docker cp snapshot'

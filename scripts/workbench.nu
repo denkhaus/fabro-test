@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
-# THE workbench: all probes + platform checks + mini integration + publish.
-# Rot/Gruen-Tabelle pro Facette; rot -> exit 1. Budget: < 15 min, < 1 EUR.
+# THE workbench: pre-clean the board, then all probes + platform checks
+# + mini integration with publish. Every run carries label bench=<id>.
+# Rot/Gruen-Tabelle pro Facette; rot -> exit 1.
 
 const SERVER = 'http://127.0.0.1:32276'
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
@@ -15,14 +16,64 @@ def fail [msg: string]: nothing -> nothing {
     exit 1
 }
 
-# -- platform checks ------------------------------------------------------
+# Kanban hygiene (user directive): the board shows ONLY this bench's runs.
+def clean-runs []: nothing -> nothing {
+    mut rounds = 0
+    loop {
+        if $rounds > 10 { break }
+        $rounds = ($rounds + 1)
+        let ids = (http get --headers (auth-header) $"($SERVER)/api/v1/runs?limit=250" | get -o data | default [] | get id)
+        if ($ids | is-empty) { break }
+        let body = ({ run_ids: $ids, force: true } | to json -r)
+        let _ = (http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/delete" $body)
+    }
+    print $"== workbench: board cleaned ($rounds - 1) batch(es)"
+}
+
+# Answer every pending HITL question by kind until the run is terminal.
+def hitl-answer [run_id: string]: nothing -> bool {
+    for _ in 1..300 {
+        let qs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/questions" | get -o data | default [])
+        let pending = ($qs | where {|q| (($q | get -o status | default 'pending') == 'pending')})
+        if ($pending | is-empty) {
+            let st = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)" | get -o lifecycle | get -o status | get -o kind | default '')
+            if $st in ['succeeded' 'failed'] { return true }
+            sleep 2sec
+            continue
+        }
+        let q = ($pending | first)
+        let qid = ($q | get -o id | default '')
+        let kind = ($q | get -o question_type | default '')
+        if ($qid | is-empty) { return false }
+        let keys = ($q | get -o options | default [] | get key | default [])
+        let body = if $kind in ['yes_no' 'confirmation'] {
+            '{"kind": "yes"}'
+        } else if $kind == 'multiple_choice' {
+            if ($keys | is-empty) { '{"kind": "selected", "option_key": "Y"}' } else {
+                ({ kind: 'selected', option_key: ($keys | first) } | to json -r)
+            }
+        } else if $kind == 'multi_select' {
+            if ($keys | is-empty) { '{"kind": "multi_selected", "option_keys": ["Y"]}' } else {
+                ({ kind: 'multi_selected', option_keys: [($keys | first)] } | to json -r)
+            }
+        } else {
+            '{"kind": "text", "text": "workbench auto-answer"}'
+        }
+        let _ = (try {
+            http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/($run_id)/questions/($qid)/answer" $body
+        } catch { null })
+        sleep 1sec
+    }
+    false
+}
+
 def platform-checks []: nothing -> list<record> {
     mut rows = []
     let health = (http get $"($SERVER)/health")
     $rows = ($rows | append {facet: 'P1 health', ok: ($health.status? == 'ok'), detail: ($health | to json -r)})
     let models = (http get --headers (auth-header) $"($SERVER)/api/v1/models?provider=zai&limit=5" | get -o data | default [])
-    let glm = ($models | where id == glm-4.7 | select -o 0)
-    $rows = ($rows | append {facet: 'P1 zai glm-4.7 configured', ok: (($glm | length) > 0 and ($glm | first | get -o configured | default false)), detail: ''})
+    let glm = ($models | where id == glm-4.7 | first | default null)
+    $rows = ($rows | append {facet: 'P1 zai glm-4.7 configured', ok: ($glm != null and ($glm | get -o configured | default false)), detail: ''})
     let envs = (http get --headers (auth-header) $"($SERVER)/api/v1/environments" | get data | get id)
     $rows = ($rows | append {facet: 'P1 env test-local', ok: ($envs | any {|e| $e == 'test-local'}), detail: ($envs | str join ',')})
     let index = (http get $"($SERVER)/" | str contains '<html')
@@ -30,48 +81,9 @@ def platform-checks []: nothing -> list<record> {
     $rows
 }
 
-    # Answer every pending HITL question by kind until the run leaves the gate.
-    def hitl-answer [run_id: string]: nothing -> bool {
-        for _ in 1..120 {
-            let qs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/questions" | get -o data | default [])
-            let pending = ($qs | where {|q| (($q | get -o status | default 'pending') == 'pending')})
-            if ($pending | is-empty) {
-                let run = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)")
-                let st = ($run | get -o lifecycle | get -o status | get -o kind | default '')
-                if $st in ['succeeded' 'failed'] { return true }
-                sleep 2sec
-                continue
-            }
-            let q = ($pending | first)
-            let qid = ($q | get -o id | default '')
-            let kind = ($q | get -o question_type | default ($q | get -o kind | default ''))
-            if ($qid | is-empty) { return false }
-            let opts = ($q | get -o options | default [] | get -o option_key | default [])
-            let body = if $kind in ['yes_no' 'confirmation'] {
-                '{"kind": "yes"}'
-            } else if $kind == 'multiple_choice' {
-                if ($opts | is-empty) { '{"kind": "selected", "option_key": "G"}' } else {
-                    ({ kind: 'selected', option_key: ($opts | first) } | to json -r)
-                }
-            } else if $kind == 'multi_select' {
-                if ($opts | is-empty) { '{"kind": "multi_selected", "option_keys": ["G"]}' } else {
-                    ({ kind: 'multi_selected', option_keys: [($opts | first)] } | to json -r)
-                }
-            } else {
-                '{"kind": "text", "text": "workbench auto-answer"}'
-            }
-            let _ = (try {
-                http post --headers (auth-header) -t 'application/json' $"($SERVER)/api/v1/runs/($run_id)/questions/($qid)/answer" $body
-            } catch { null })
-            sleep 1sec
-        }
-        false
-    }
-
-    # -- one probe run (helper above) ----------------------------------------
-    def probe-run [name: string, expect: string]: nothing -> record {
+def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
-    let created = (do { ^$FABRO create $name --environment test-local --json --server $SERVER } | complete)
+    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment test-local --json --server $SERVER } | complete)
     if $created.exit_code != 0 {
         return {facet: $name, ok: false, detail: ($created.stderr | str trim | str substring 0..140)}
     }
@@ -82,42 +94,69 @@ def platform-checks []: nothing -> list<record> {
         return {facet: $name, ok: false, detail: ($started.stderr | str trim | str substring 0..140)}
     }
 
-    # interview probe: answer every pending HITL question by kind
-        if $name == 'probe-08-interview' {
-            let answered = (hitl-answer $run_id)
-            if not $answered { return {facet: $name, ok: false, detail: 'hitl questions not fully answered'} }
-        }
+    if $name == 'probe-08-interview' {
+        let answered = (hitl-answer $run_id)
+        if not $answered { return {facet: $name, ok: false, detail: 'hitl questions not fully answered'} }
+    }
 
-        let waited = (do { ^$FABRO wait $run_id --json --server $SERVER } | complete)
+    let waited = (do { ^$FABRO wait $run_id --json --server $SERVER } | complete)
     let info = (try { $waited.stdout | from json } catch { null })
     if $info == null { return {facet: $name, ok: false, detail: 'no terminal json'} }
     let status = ($info | get -o status | default '?')
     let secs = ((((date now) - $t0) | into int) / 1_000_000_000)
 
     let ok = if $expect == 'succeeded' { $status == 'succeeded' } else { $status == 'failed' }
-    let detail = if $ok { $"($status) in ($secs)s" } else { $"expected ($expect), got ($status): ($info | get -o reason | default '?')" }
+    let detail = if $ok { $"($status) in ($secs)s" } else { $"expected ($expect), got ($status)" }
 
-    # extra assertions
     if $ok and $name == 'probe-04-runtools' {
-        # child run must exist and be terminal
-        let children = (http get --headers (auth-header) $"($SERVER)/api/v1/runs?limit=10" | get data | where {|r| (($r | get -o parent_id | default '') == $run_id)})
+        let children = (http get --headers (auth-header) $"($SERVER)/api/v1/runs?limit=50" | get data | where {|r| (($r | get -o parent_id | default '') == $run_id)})
         let child_ok = ($children | length) > 0
-        return {facet: $name, ok: $child_ok, detail: ($detail + $" | children=($children | length)" )}
+        return {facet: $name, ok: $child_ok, detail: ($detail + $" | children=($children | length)") }
     }
     if $ok and $name == 'probe-07-artifacts' {
         let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
         let collected = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'artifact.collected')} | length)
-        return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)" )}
+        return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)") }
     }
     if $ok and $name == 'probe-06-guards' {
-        let reason = ($info | get -o reason | default '' | str lowercase)
+        let api = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($run_id)")
+        let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
         let deadlocked = ($reason | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }
 
+# The mini loop consumes one seed per bench; when the tracker is empty,
+# append the next pool seed to .seeds/issues.jsonl and push.
+def seed-refill []: nothing -> nothing {
+    let rows = (open .seeds/issues.jsonl | lines | where {|l| ($l | str trim) != ''} | each {|l| $l | from json})
+    if ($rows | where status == open | length) > 0 { return }
+    let pool = [
+        [id title desc];
+        [fabro-test-0101 'Add a mean(values) function to src/utils.py' 'Add mean(values) returning the arithmetic mean of a non-empty list. Tests: ints, floats, single element.']
+        [fabro-test-0102 'Add a capitalize_words(text) helper to src/utils.py' 'Capitalize every whitespace-separated word. Tests: normal phrase, multiple spaces, empty string.']
+        [fabro-test-0103 'Add a reverse_list(values) helper to src/utils.py' 'Return a new reversed list, input untouched. Tests: ints, empty list, input-immutability.']
+        [fabro-test-0104 'Add a count_vowels(text) helper to src/utils.py' 'Count a/e/i/o/u case-insensitively. Tests: mixed case, no vowels, empty string.']
+        [fabro-test-0105 'Add a max_abs(values) helper to src/utils.py' 'Return the value with the largest absolute value. Tests: negatives, ties, single element.']
+        [fabro-test-0106 'Add a flatten_once(lists) helper to src/utils.py' 'Flatten exactly one level of nesting. Tests: mixed depths, empty lists.']
+    ]
+    let used = ($rows | get id)
+    let next = ($pool | where {|p| ($p.id not-in $used)} | first | default null)
+    if $next == null { return }
+    let now = (date now | format date '%Y-%m-%dT%H:%M:%S.000Z')
+    let row = ({ id: $next.id, title: $next.title, status: 'open', type: 'task', priority: 1, createdAt: $now, updatedAt: $now, description: $next.desc } | to json -r)
+    ($row + '\n') | save --append .seeds/issues.jsonl --raw
+    let _ = (do { git add .seeds/issues.jsonl } | complete)
+    let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $"seeds: refill ($next.id) for the workbench line" --quiet } | complete)
+    let _ = (do { git push --quiet } | complete)
+    print $"== workbench: seed refilled ($next.id)"
+}
+
 def main [] {
+    clean-runs
+    let bench_id = (date now | format date '%m%d-%H%M%S')
+    print $"== workbench: bench=($bench_id)"
     print '== workbench: platform checks'
     let prows = (platform-checks)
     print ($prows | table --index false)
@@ -132,16 +171,18 @@ def main [] {
         [probe-06-guards failed]
         [probe-07-artifacts succeeded]
         [probe-08-interview succeeded]
+        [probe-09-envelope-deny failed]
     ]
-    print $"== workbench: ($probes | length) probes"
+    print $"== workbench: ($probes | length) probes (label bench=($bench_id))"
     mut rows = []
     for p in $probes {
         print $"-- ($p.name)"
-        $rows = ($rows | append (probe-run $p.name $p.expect))
+        $rows = ($rows | append (probe-run $p.name $p.expect $bench_id))
     }
 
     print '== workbench: mini integration (seed loop + publish)'
-    let mini = (do { ^$FABRO create mini --environment test-local --json --server $SERVER } | complete)
+    seed-refill
+    let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment test-local --json --server $SERVER } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
     let _ = (do { ^$FABRO start $mini_id --server $SERVER } | complete)
@@ -149,12 +190,15 @@ def main [] {
     let mini_ok = ($mw.stdout | from json | get -o status | default 'failed') == 'succeeded'
     $rows = ($rows | append {facet: '09 mini seed loop', ok: $mini_ok, detail: $"run ($mini_id)"})
     if $mini_ok {
+        let evs = (http get --headers (auth-header) $"($SERVER)/api/v1/runs/($mini_id)/events?limit=1000" | get -o data | default [])
+        let notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
+        $rows = ($rows | append {facet: '10 slack notification', ok: ($notif > 0), detail: $"notification.sent=($notif)"})
         let pub = (do { nu scripts/publish-bridge.nu $mini_id } | complete)
-        $rows = ($rows | append {facet: '09 publish bridge', ok: ($pub.exit_code == 0), detail: ($pub.stdout | lines | last | default '')})
+        $rows = ($rows | append {facet: '09 publish bridge', ok: ($pub.exit_code == 0), detail: ($pub.stdout | lines | last | default ($pub.stderr | str substring 0..120))})
     }
 
     print ''
-    print '== workbench: FACET TABLE'
+    print $"== workbench: FACET TABLE bench=($bench_id)"
     let all = ($prows | append $rows)
     print ($all | table --index false)
     let red = ($all | where not ok)
