@@ -3,6 +3,14 @@ _version = 1
 [workflow]
 graph = "workflow.fabro"
 
+# Canonical run target: the checkout's origin uses an SSH host alias
+# (denkhaus.github.com) that cannot normalize to github.com — declare the
+# SCM explicitly so the run target derives without origin sniffing.
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
+
 # Mini line: cheap non-reasoning model, no reasoning_effort needed
 # (enum is low|medium|high|xhigh|max — glm-4.7 is non-reasoning).
 [run.model]
