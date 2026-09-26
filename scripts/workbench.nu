@@ -145,29 +145,24 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
 # Before every bench: reset bench/canonical.py + tests to the tracked stub,
 # then ensure the seed row is open with the exact same text — runs stay
 # comparable across benches and upstream merges (user directive).
+# ALL tracker mutations go through the seeds app, never manual JSON edits.
 def seed-ensure []: nothing -> nothing {
     # (a) reset the canonical files to the prestate copies
     cp .fabro/workbench/prestate/canonical.py bench/canonical.py
     cp .fabro/workbench/prestate/test_canonical.py tests/test_canonical.py
-    # (b) rewrite the tracker row: closed -> open, missing -> append (fixed id+wording)
-    let now = (date now | format date '%Y-%m-%dT%H:%M:%S.000Z')
-    let row = { id: 'fabro-test-9001'
-        title: 'Implement canonical_mark() in bench/canonical.py'
-        status: 'open'
-        type: 'task'
-        priority: 1
-        createdAt: $now
-        updatedAt: $now
-        description: 'Replace the NotImplementedError stub in bench/canonical.py so canonical_mark() returns the exact string canonical-ok-9001. Add unit tests in tests/test_canonical.py covering the return value (the tracked prestate test already expects it). Acceptance: python3 -m unittest discover -s tests is green and the stub is gone.' }
-    let lines = (open .seeds/issues.jsonl | lines | where {|l| ($l | str trim) != ''})
-    let kept = ($lines | each {|l|
-        let r = ($l | from json)
-        if $r.id == 'fabro-test-9001' { $l } else {
-            ($r | update status 'closed' | update updatedAt $now | to json -r)
-        }
-    })
-    let out = ($kept | append ($row | to json -r) | str join (char nl)) + (char nl)
-    $out | save .seeds/issues.jsonl --raw --force
+    # (b) canonical-seed exclusivity + re-pin via the seeds app.
+    #     Manual .seeds JSON edits are discouraged — the hand-rolled join
+    #     collapsed the tracker to one literal-\n line once (bench 0926-080715).
+    let open_ids = (^seeds list --status open --format ids | lines | where {|l| ($l | str trim) != ''})
+    let others = ($open_ids | where {|id| $id != 'fabro-test-9001'})
+    if ($others | is-not-empty) {
+        let _ = (do { ^seeds close ...$others --reason 'bench: canonical-seed exclusivity (one bench seed per run)' } | complete)
+    }
+    let desc = 'Replace the NotImplementedError stub in bench/canonical.py so canonical_mark() returns the exact string canonical-ok-9001. Add unit tests in tests/test_canonical.py covering the return value (the tracked prestate test already expects it). Acceptance: python3 -m unittest discover -s tests is green and the stub is gone.'
+    let upd = (do { ^seeds update fabro-test-9001 --status open --title 'Implement canonical_mark() in bench/canonical.py' --description $desc } | complete)
+    if $upd.exit_code != 0 {
+        fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; sd create cannot mint it)"
+    }
     # (c) commit + push the deterministic prestate
     let _ = (do { git add bench/canonical.py tests/test_canonical.py .seeds/issues.jsonl } | complete)
     let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
