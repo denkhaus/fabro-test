@@ -164,13 +164,13 @@ def seed-ensure []: nothing -> nothing {
     # (b) canonical-seed exclusivity + re-pin via the seeds app.
     #     Manual .seeds JSON edits are discouraged — the hand-rolled join
     #     collapsed the tracker to one literal-\n line once (bench 0926-080715).
-    let open_ids = (^seeds list --status open --format ids | lines | where {|l| ($l | str trim) != ''})
+    let open_ids = (^mise exec -- seeds list --status open --format ids | lines | where {|l| ($l | str trim) != ''})
     let others = ($open_ids | where {|id| $id != 'fabro-test-9001'})
     if ($others | is-not-empty) {
-        let _ = (do { ^seeds close ...$others --reason 'bench: canonical-seed exclusivity (one bench seed per run)' } | complete)
+        let _ = (do { ^mise exec -- seeds close ...$others --reason 'bench: canonical-seed exclusivity (one bench seed per run)' } | complete)
     }
     let desc = 'Replace the NotImplementedError stub in bench/canonical.py so canonical_mark() returns the exact string canonical-ok-9001. Add unit tests in tests/test_canonical.py covering the return value (the tracked prestate test already expects it). Acceptance: python3 -m unittest discover -s tests is green and the stub is gone.'
-    let upd = (do { ^seeds update fabro-test-9001 --status open --title 'Implement canonical_mark() in bench/canonical.py' --description $desc } | complete)
+    let upd = (do { ^mise exec -- seeds update fabro-test-9001 --status open --title 'Implement canonical_mark() in bench/canonical.py' --description $desc } | complete)
     if $upd.exit_code != 0 {
         fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
     }
@@ -242,8 +242,10 @@ def main [] {
     print ($all | table --index false)
     let red = ($all | where not ok)
     # Known-red facets: tracked regressions (seed filed) — visible, but they
-    # do not fail the bench exit until their seeds land.
-    let known_red = ['probe-03-tools' 'probe-06-guards']
+    # do not fail the bench exit until their seeds land. fabro-1a41 and
+    # fabro-51ad landed 2026-09-26; the list is empty until a new tracked
+    # regression goes red.
+    let known_red: list<string> = []
     let fresh = ($red | where {|r| ($r.facet not-in $known_red)} | length)
     if ($fresh > 0) {
         print -e $"WORKBENCH RED: ($fresh) NEW facet failures"
