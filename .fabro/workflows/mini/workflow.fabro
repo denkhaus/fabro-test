@@ -129,7 +129,8 @@ digraph Mini {
     tester -> implementer [label="Gate red"]
 
     evidence -> reviewer [label="Evidence ready", condition="outcome=succeeded"]
-    evidence -> exit [x.kind="soft", label="Capture failed (next run re-enters)"]
+    evidence -> exit [x.kind="soft", label="Capture failed (next run re-enters)", condition="outcome=failed"]
+    evidence -> exit [label="Capture inconclusive"]
 
     reviewer -> closeout [label="Approved", condition="preferred_label=\"Approved\""]
     reviewer -> exit [x.kind="deadlock", label="Review deadlock (3 cycles, needs a human)", condition="nodes.reviewer.generation >= 3"]

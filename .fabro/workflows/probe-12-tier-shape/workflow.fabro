@@ -1,0 +1,11 @@
+digraph Probe12TierShape {
+    graph [goal="A conditional success route must beat an unconditional soft exit"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    evidence [shape=parallelogram, script="true"]
+    reviewer [shape=parallelogram, script="true"]
+    start -> evidence
+    evidence -> reviewer [label="Evidence ready", condition="outcome=succeeded"]
+    evidence -> exit [x.kind="soft", label="Capture failed"]
+    reviewer -> exit
+}

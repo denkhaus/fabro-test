@@ -19,6 +19,7 @@ const PROBES = [
     [probe-08-interview succeeded]
     [probe-09-envelope-deny failed]
     [probe-11-admission-deny refused]
+    [probe-12-tier-shape succeeded]
 ]
 
 def auth-header []: nothing -> record {

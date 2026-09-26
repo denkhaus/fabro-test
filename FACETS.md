@@ -27,6 +27,7 @@ Host-Skripte in nu. Budget: < 15 min und < 1 EUR pro Workbench-Lauf.
 | 11 | Parallel-Fan-out/Join (2 Kanten + Join-Knoten) | geplant | Wandzeit < Summe, Join sieht beide Marker | offen |
 | 06 | Generation-Guards (fabro-51ad landed 2026-09-26: condition lowering, exit-kind mapping, breaker option a) | probe-06-guards | Deadlock-Exit unter DEFAULT-Limit | bench 0926-112218 + 0926-112401 |
 | 11 | Admission verweigert unbekannte x.* (fabro-70af root) | probe-11-admission-deny | create-Verweigerung nennt fork.x_attribute_known | neu |
+| 12 | Bedingte Erfolgsroute schlägt unbedingte Soft-Exit-Kante (Tiering) | probe-12-tier-shape | Run succeeded (nicht SoftStop) | bench=single-0926-135441 |
 | 03 | x.tools-Allowlist (fabro-1a41 landed 2026-09-26: ToolPolicyHooks, engine-layer denial) | probe-03-tools | write_file verweigert, Run succeeded | bench=single-0926-112254 |
 
 Pflege: neue Produkt-Bugs (rootprint-Fehlerbilder von mirtuell) landen als
