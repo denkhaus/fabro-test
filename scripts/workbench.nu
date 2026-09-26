@@ -161,7 +161,7 @@ def seed-ensure []: nothing -> nothing {
     let desc = 'Replace the NotImplementedError stub in bench/canonical.py so canonical_mark() returns the exact string canonical-ok-9001. Add unit tests in tests/test_canonical.py covering the return value (the tracked prestate test already expects it). Acceptance: python3 -m unittest discover -s tests is green and the stub is gone.'
     let upd = (do { ^seeds update fabro-test-9001 --status open --title 'Implement canonical_mark() in bench/canonical.py' --description $desc } | complete)
     if $upd.exit_code != 0 {
-        fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; sd create cannot mint it)"
+        fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
     }
     # (c) commit + push the deterministic prestate
     let _ = (do { git add bench/canonical.py tests/test_canonical.py .seeds/issues.jsonl } | complete)
