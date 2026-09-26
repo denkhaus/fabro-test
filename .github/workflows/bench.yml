@@ -1,0 +1,15 @@
+name: bench
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the bench test suite
+        run: python3 -m unittest discover -s tests -v
