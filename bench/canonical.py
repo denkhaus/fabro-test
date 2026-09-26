@@ -1,6 +1,6 @@
-"""Canonical workbench task."""
+"""Canonical workbench task — reset to this stub before every bench."""
 
 
 def canonical_mark() -> str:
-    """Return the bench cycle's required canonical value."""
-    return "canonical-ok-9003"
+    """Stub: the bench seed replaces this with the required return value."""
+    raise NotImplementedError("bench prestate stub")
