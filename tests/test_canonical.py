@@ -9,7 +9,7 @@ from canonical import canonical_mark  # noqa: E402
 
 class CanonicalMarkTests(unittest.TestCase):
     def test_returns_required_value(self):
-        self.assertEqual(canonical_mark(), "canonical-ok-9002")
+        self.assertEqual(canonical_mark(), "canonical-ok-9003")
 
 
 if __name__ == "__main__":
