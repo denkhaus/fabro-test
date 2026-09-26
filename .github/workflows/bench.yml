@@ -7,9 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  bench:
+  smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run the bench test suite
+      - name: Everything compiles (prestate-safe merge gate)
+        run: python3 -m compileall -q bench src tests
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bench test suite (informational between seeds)
         run: python3 -m unittest discover -s tests -v
