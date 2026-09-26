@@ -1,0 +1,12 @@
+digraph Probe11AdmissionDeny {
+    graph [goal="Unknown x.* must refuse admission (fabro-70af root check)"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    probe [
+        label="Carries an attribute outside the x.* vocabulary",
+        x.fs_write="src/**",
+        x.bogus_probe="not in the vocabulary on purpose"
+    ]
+    start -> probe [label="Go"]
+    probe -> exit [label="Done"]
+}

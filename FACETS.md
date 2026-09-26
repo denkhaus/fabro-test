@@ -26,6 +26,7 @@ Host-Skripte in nu. Budget: < 15 min und < 1 EUR pro Workbench-Lauf.
 | 10 | Skill-Calling ([run.agent] skills + UseSkill) | probe-10-skills | Marker aus geladener Skill | neu |
 | 11 | Parallel-Fan-out/Join (2 Kanten + Join-Knoten) | geplant | Wandzeit < Summe, Join sieht beide Marker | offen |
 | 06* | Generation-Guards — BEKANNT ROT bis fabro-51ad | probe-06-guards | Deadlock-Exit | BENCH 8-13 |
+| 11 | Admission verweigert unbekannte x.* (fabro-70af root) | probe-11-admission-deny | create-Verweigerung nennt fork.x_attribute_known | neu |
 | 03* | x.tools-Allowlist — BEKANNT ROT bis fabro-1a41 (Regression) | probe-03-tools | write_file muss verweigert werden | Run 01M3D6JZAX1YHB |
 
 Pflege: neue Produkt-Bugs (rootprint-Fehlerbilder von mirtuell) landen als

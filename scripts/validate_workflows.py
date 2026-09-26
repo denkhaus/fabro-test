@@ -9,6 +9,10 @@ fabro = pathlib.Path.home() / ".fabro/bin/fabro"
 root = pathlib.Path(__file__).resolve().parents[1]
 target = sys.argv[1] if len(sys.argv) > 1 else ""
 graphs = sorted((root / ".fabro/workflows").glob(f"*{target}*/workflow.fabro"))
+# admission-deny probes are invalid ON PURPOSE (fabro-70af root check);
+# their refusal is proven by `just probe probe-11-admission-deny`,
+# not by this validator.
+graphs = [g for g in graphs if "admission-deny" not in g.parent.name]
 if not graphs:
     print("validate: no workflow graphs found")
     sys.exit(2)

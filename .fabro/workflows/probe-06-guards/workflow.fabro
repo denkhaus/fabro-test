@@ -1,5 +1,5 @@
 digraph Probe06Guards {
-    graph [goal="A permanently failing loop terminates via the generation deadlock guard, never hangs", default_max_retries=0, stall_timeout="5m", max_node_visits=20]
+    graph [goal="A permanently failing loop terminates via the generation deadlock guard, never hangs", default_max_retries=0, stall_timeout="5m", max_node_visits=20, loop_restart_signature_limit=10]
     start [shape=Mdiamond]
     exit  [shape=Msquare]
     flaky [

@@ -1,0 +1,6 @@
+# Local development toolset for the workbench, managed by mise.
+[tools]
+# The issue tracker CLI `seeds`, pinned LOCALLY (crates.io 0.3.0; the
+# workbench's seed-ensure calls it — the repo must not rely on a global
+# install).
+"cargo:seeds" = "0.3.0"

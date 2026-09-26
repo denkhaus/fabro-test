@@ -18,6 +18,7 @@ const PROBES = [
     [probe-07-artifacts succeeded]
     [probe-08-interview succeeded]
     [probe-09-envelope-deny failed]
+    [probe-11-admission-deny refused]
 ]
 
 def auth-header []: nothing -> record {
@@ -99,7 +100,17 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     let t0 = (date now)
     let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment test-local --json --server $SERVER } | complete)
     if $created.exit_code != 0 {
-        return {facet: $name, ok: false, detail: ($created.stderr | str trim | str substring 0..140)}
+        let msg = ($created.stderr | str trim)
+        # expect 'refused': admission must REJECT the graph and say why
+        # (fabro-70af: unknown x.* -> fork.x_attribute_known).
+        if $expect == 'refused' {
+            let named = ($msg | str contains 'x_attribute_known') or ($msg | str contains 'unknown attribute')
+            return {facet: $name, ok: $named, detail: ($msg | str substring 0..140)}
+        }
+        return {facet: $name, ok: false, detail: ($msg | str substring 0..140)}
+    }
+    if $expect == 'refused' {
+        return {facet: $name, ok: false, detail: 'expected an admission refusal, but create succeeded'}
     }
     let run_id = ($created.stdout | from json | get -o run_id | default '')
     if ($run_id | is-empty) { return {facet: $name, ok: false, detail: 'no run_id'} }
