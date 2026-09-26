@@ -28,6 +28,7 @@ Getestete Facetten:
 ## Lokaler Lauf
 ```sh
 # 1. Server (einmal):  fabro server start
+# Einzelprobe:         just probe probe-06-guards   # eine Facette, keine volle Bench
 # 2. Run:              ./scripts/run-mini.sh [--goal 'implement fabro-test-xxxx']
 fabro create mini --environment test-local --json --server http://127.0.0.1:32276
 fabro start  <run_id> --server http://127.0.0.1:32276

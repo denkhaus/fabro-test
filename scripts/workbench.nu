@@ -6,6 +6,20 @@
 const SERVER = 'http://127.0.0.1:32276'
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
+# Probe registry: default expectation per workflow (probe-06/09 expect failure).
+const PROBES = [
+    [name expect];
+    [probe-01-schema succeeded]
+    [probe-02-envelope succeeded]
+    [probe-03-tools succeeded]
+    [probe-04-runtools succeeded]
+    [probe-05-hooks succeeded]
+    [probe-06-guards failed]
+    [probe-07-artifacts succeeded]
+    [probe-08-interview succeeded]
+    [probe-09-envelope-deny failed]
+]
+
 def auth-header []: nothing -> record {
     let token = (open ~/.fabro/auth.json | get servers | get -o $SERVER | get -o token | default '')
     { Authorization: $"Bearer ($token)" }
@@ -152,13 +166,35 @@ def seed-ensure []: nothing -> nothing {
             ($r | update status 'closed' | update updatedAt $now | to json -r)
         }
     })
-    let out = ($kept | append ($row | to json -r) | str join '\n') + '\n'
+    let out = ($kept | append ($row | to json -r) | str join (char nl)) + (char nl)
     $out | save .seeds/issues.jsonl --raw --force
     # (c) commit + push the deterministic prestate
     let _ = (do { git add bench/canonical.py tests/test_canonical.py .seeds/issues.jsonl } | complete)
     let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
     let _ = (do { git push --quiet } | complete)
     print '== workbench: canonical seed ensured (fabro-test-9001, fixed wording)'
+}
+
+# Single probe run — no board clean, no mini integration.
+#   nu scripts/workbench.nu probe probe-06-guards
+#   nu scripts/workbench.nu probe probe-01-schema --expect succeeded
+# Default expect comes from PROBES (unknown names default to 'succeeded',
+# so `probe mini` runs the seed loop WITHOUT publish). Exit 1 on red.
+# Known-red regressions (seed filed): probe-03-tools (fabro-1a41),
+# probe-06-guards (fabro-51ad) — a red exit there is the expected finding.
+def "main probe" [name: string, --expect: string]: nothing -> nothing {
+    let known = ($PROBES | where name == $name)
+    let exp = if $expect != null { $expect } else if ($known | is-empty) { 'succeeded' } else { $known | first | get expect }
+    let bench_id = ('single-' + (date now | format date '%m%d-%H%M%S'))
+    print $"== probe: ($name) expect=($exp) label bench=($bench_id)"
+    let row = (probe-run $name $exp $bench_id)
+    print ($row | table --index false)
+    if not $row.ok {
+        if $name in ['probe-03-tools' 'probe-06-guards'] {
+            print -e 'probe red — KNOWN regression (fabro-1a41 / fabro-51ad), see FACETS.md'
+        }
+        exit 1
+    }
 }
 
 def main [] {
@@ -169,18 +205,7 @@ def main [] {
     let prows = (platform-checks)
     print ($prows | table --index false)
 
-    let probes = [
-        [name expect];
-        [probe-01-schema succeeded]
-        [probe-02-envelope succeeded]
-        [probe-03-tools succeeded]
-        [probe-04-runtools succeeded]
-        [probe-05-hooks succeeded]
-        [probe-06-guards failed]
-        [probe-07-artifacts succeeded]
-        [probe-08-interview succeeded]
-        [probe-09-envelope-deny failed]
-    ]
+    let probes = $PROBES
     print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
     mut rows = []
     for p in $probes {
