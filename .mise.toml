@@ -5,3 +5,8 @@
 # 2026-09-26 — the ubi backend is deprecated). The workbench's
 # seed-ensure calls it — the repo must not rely on a global install.
 "cargo:seeds" = "0.5.0"
+# Pre-commit secret gate (operator directive 2026-09-26): lefthook
+# runs betterleaks over the staged files. Both come from mise so a
+# fresh checkout works without global installs.
+lefthook = "2.1.14"
+betterleaks = "1.8.1"
