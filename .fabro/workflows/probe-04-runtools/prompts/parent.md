@@ -6,7 +6,7 @@ Use the Fabro run tools in exactly this order:
    Remember the returned workflow version id.
 2. `fabro_run_create` with one run spec:
    `workflow_version_id` = the id from step 1,
-   `environment` = `test-local`,
+   `environment` = `toolchain`,  # the child executes nu scripts (probe-04-child port 2026-09-27); test-local (buildpack) has no nushell
    `start` = true,
    `target` = { "git": { "repo": "denkhaus/fabro-test", "branch": "main" } }
    (explicit target: the no-target inheritance path needs fabro-ac40 —
