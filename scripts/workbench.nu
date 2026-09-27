@@ -53,8 +53,18 @@ def clean-runs []: nothing -> nothing {
 }
 
 # Answer every pending HITL question by kind until the run is terminal.
+# Question ids carry a fragment-style separator ("yes_no#2") — url-encode
+# them or the path silently truncates at the # (404 loop, bench 0927-172546).
+# OAuth access tokens live ~10 min: refresh via one CLI call before the
+# loop and every 30 polls (external refresher processes are not reliable).
 def hitl-answer [run_id: string]: nothing -> bool {
+    let _ = (do { ^$FABRO system info --server (server) } | complete)
+    mut refreshed = 0
     for _ in 1..300 {
+        $refreshed = ($refreshed + 1)
+        if ($refreshed // 30) == ($refreshed / 30) {
+            let _ = (do { ^$FABRO system info --server (server) } | complete)
+        }
         let qs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/questions" | get -o data | default [])
         let pending = ($qs | where {|q| (($q | get -o status | default 'pending') == 'pending')})
         if ($pending | is-empty) {
@@ -82,7 +92,7 @@ def hitl-answer [run_id: string]: nothing -> bool {
             '{"kind": "text", "text": "workbench auto-answer"}'
         }
         let _ = (try {
-            http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)/questions/($qid)/answer" $body
+            http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)/questions/($qid | url encode)/answer" $body
         } catch { null })
         sleep 1sec
     }
