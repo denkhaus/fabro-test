@@ -3,4 +3,4 @@
 
 def canonical_mark() -> str:
     """Return the canonical bench marker."""
-    return "canonical-ok-9001"
+    return "canonical-ok-9004"
