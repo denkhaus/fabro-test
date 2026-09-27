@@ -14,7 +14,7 @@ digraph Probe02Envelope {
     verify [
         label="Verify: allowed present, forbidden absent",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-02-envelope/scripts/verify.py",
+        script="nu .fabro/workflows/probe-02-envelope/scripts/verify.nu",
         output_schema="routing",
         timeout="30s",
         max_retries=0

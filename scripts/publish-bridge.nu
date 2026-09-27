@@ -5,7 +5,8 @@
    # 3. server PR path (`fabro pr create`), gh fallback (PR + squash auto-merge + link)
    #    when the LLM title generation fails (known zai structured-output gap)
    # Usage: nu scripts/publish-bridge.nu <RUN_ID>
-const SERVER = 'http://127.0.0.1:32276'
+# Runplace-agnostic: FABRO_SERVER like run-mini.nu; default = local stack.
+def server []: nothing -> string { $env.FABRO_SERVER? | default 'http://127.0.0.1:32276' }
 const REPO = 'denkhaus/fabro-test'
 const ORIGIN = 'https://github.com/denkhaus/fabro-test.git'
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
@@ -24,14 +25,14 @@ def ok [result: record, what: string]: nothing -> record {
 }
 
 def auth-header []: nothing -> record {
-    let token = (open ~/.fabro/auth.json | get servers | get -o $SERVER | get -o token | default '')
+    let token = (open ~/.fabro/auth.json | get servers | get -o (server) | get -o token | default '')
     { Authorization: $"Bearer ($token)" }
 }
 
 def run-diff-head-sha [run_id: string] {
         mut after = 0
         for _ in 1..12 {
-            let url = $"($SERVER)/api/v1/runs/($run_id)/events?limit=1000&after=($after)"
+            let url = $"((server))/api/v1/runs/($run_id)/events?limit=1000&after=($after)"
             let page = (http get --headers (auth-header) $url | get -o data | default [])
             if ($page | is-empty) { break }
             $after = ($page | last | get stream_seq)
@@ -60,7 +61,7 @@ def main [run_id: string] {
     rm -rf $tmpdir
 
     print '== bridge: creating PR (server path first)'
-    let created = (do { ^$FABRO pr create $run_id --model ($env.PR_MODEL? | default 'glm-4.7') --server $SERVER } | complete)
+    let created = (do { ^$FABRO pr create $run_id --model ($env.PR_MODEL? | default 'glm-4.7') --server (server) } | complete)
     if $created.exit_code == 0 {
         print '== bridge: done (engine-created PR)'
         return
@@ -72,6 +73,6 @@ def main [run_id: string] {
     let pr = (ok (do { ^gh pr create -R $REPO --base main --head $"fabro/run/($run_id)" --title $title --body $body } | complete) 'gh pr create')
     let pr_url = ($pr.stdout | str trim)
     ok (do { ^gh pr merge -R $REPO --squash --auto $pr_url } | complete) 'gh pr merge'
-    ok (do { ^$FABRO pr link $run_id $pr_url --server $SERVER } | complete) 'fabro pr link'
+    ok (do { ^$FABRO pr link $run_id $pr_url --server (server) } | complete) 'fabro pr link'
     print $"== bridge: done (gh fallback) — ($pr_url)"
 }

@@ -12,7 +12,7 @@ digraph Probe10Skills {
     check [
         label="Check: marker in context",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-10-skills/scripts/check.py",
+        script="nu .fabro/workflows/probe-10-skills/scripts/check.nu",
         stdin_source="skill_marker",
         timeout="30s",
         max_retries=0

@@ -5,14 +5,14 @@ digraph Probe07Artifacts {
     emit [
         label="Emit: write out/report.txt",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-07-artifacts/scripts/emit.py",
+        script="nu .fabro/workflows/probe-07-artifacts/scripts/emit.nu",
         timeout="30s",
         max_retries=0
     ]
     verify [
         label="Verify: file present",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-07-artifacts/scripts/verify.py",
+        script="nu .fabro/workflows/probe-07-artifacts/scripts/verify.nu",
         output_schema="routing",
         timeout="30s",
         max_retries=0

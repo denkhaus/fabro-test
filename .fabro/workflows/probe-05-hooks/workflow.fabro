@@ -5,14 +5,14 @@ digraph Probe05Hooks {
     emit [
         label="Emit: trigger the hook",
         shape=parallelogram,
-        script="python3 -c \"print('hook trigger')\"",
+        script="nu -c \"print 'hook trigger'\"",
         timeout="30s",
         max_retries=0
     ]
     verify [
         label="Verify: journal written",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-05-hooks/scripts/verify.py",
+        script="nu .fabro/workflows/probe-05-hooks/scripts/verify.nu",
         output_schema="routing",
         timeout="30s",
         max_retries=0

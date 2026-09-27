@@ -20,7 +20,7 @@ digraph Probe08Interview {
     confirm [
         label="Confirm: all gates answered",
         shape=parallelogram,
-        script="python3 -c \"print('hitl probe confirmed')\"",
+        script="nu -c \"print 'hitl probe confirmed'\"",
         timeout="30s",
         max_retries=0
     ]

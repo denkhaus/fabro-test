@@ -11,12 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Everything compiles (prestate-safe merge gate)
-        run: python3 -m compileall -q bench src tests
+      - uses: jdx/mise-action@v2
+      - name: Everything parses (prestate-safe merge gate)
+        run: |
+          nu --version
+          for f in bench/*.nu tests/*.nu scripts/*.nu .fabro/workflows/*/scripts/*.nu; do
+            [ -e "$f" ] || continue
+            nu --ide-check 10 "$f" >/dev/null
+          done
   tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Bench test suite (green on run PRs; red prestate is the task)
-        run: python3 -m unittest discover -s tests -v
+      - uses: jdx/mise-action@v2
+      - name: Bench acceptance (green on run PRs; red prestate is the task)
+        run: nu tests/test-canonical.nu

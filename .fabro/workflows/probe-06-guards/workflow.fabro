@@ -5,7 +5,7 @@ digraph Probe06Guards {
     flaky [
         label="Flaky: always fails",
         shape=parallelogram,
-        script="python3 -c \"import sys; sys.exit(1)\"",
+        script="nu -c \"exit 1\"",
         timeout="20s",
         max_retries=0,
         max_visits=10
@@ -13,7 +13,7 @@ digraph Probe06Guards {
     retry [
         label="Retry: also fails",
         shape=parallelogram,
-        script="python3 -c \"import sys; sys.exit(1)\"",
+        script="nu -c \"exit 1\"",
         timeout="20s",
         max_retries=0,
         max_visits=10

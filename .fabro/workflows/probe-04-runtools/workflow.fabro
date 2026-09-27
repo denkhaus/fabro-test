@@ -14,7 +14,7 @@ digraph Probe04Runtools {
     check [
         label="Claim check: child id present",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-04-runtools/scripts/check.py",
+        script="nu .fabro/workflows/probe-04-runtools/scripts/check.nu",
         stdin_source="child_run_id",
         timeout="30s",
         max_retries=0
