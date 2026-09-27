@@ -9,7 +9,9 @@ Use the Fabro run tools in exactly this order:
    `environment` = `test-local`,
    `start` = true,
    `target` = { "git": { "repo": "denkhaus/fabro-test", "branch": "main" } }
-   (without the target the child records as repository "unknown").
+   (explicit target: the no-target inheritance path needs fabro-ac40 —
+   the child would inherit the parent's run branch, which origin lacks
+   until the publish pipeline pushes run branches).
 3. Wait for the child run to reach a terminal state with `fabro_run_wait`
    (or poll `fabro_run_get`). The child is one command stage — seconds.
 4. Verify the child's terminal status is succeeded.

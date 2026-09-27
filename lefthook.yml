@@ -1,0 +1,16 @@
+# lefthook config: pre-commit secret gate via betterleaks.
+#
+# INVARIANT (mirrors ~/dev/seeds): run sandboxes NEVER install hooks —
+# lefthook.yml is inert on its own; it activates ONLY after an operator
+# runs `lefthook install` in their own checkout. A toolchain/bootstrap
+# `lefthook install` or a core.hooksPath override would break every
+# fabro run cloned from this repo (each stage commit would hit the
+# gate from inside the sandbox).
+#
+# The gate resolves betterleaks through mise (pinned in .mise.toml):
+# the hook runs in a bare sh whose PATH may carry non-executable
+# lookalikes (WSL /mnt/c), which broke direct invocation.
+pre-commit:
+    commands:
+        betterleaks:
+            run: mise exec -- betterleaks dir {staged_files}
