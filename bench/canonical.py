@@ -2,5 +2,5 @@
 
 
 def canonical_mark() -> str:
-    """Stub: the bench seed replaces this with the required return value."""
-    raise NotImplementedError("bench prestate stub")
+    """Return the canonical bench marker."""
+    return "canonical-ok-9001"
