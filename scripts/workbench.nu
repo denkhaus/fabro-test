@@ -97,7 +97,7 @@ def platform-checks []: nothing -> list<record> {
     let glm = ($models | where id == glm-4.7 | first | default null)
     $rows = ($rows | append {facet: 'P1 zai glm-4.7 configured', ok: ($glm != null and ($glm | get -o configured | default false)), detail: ''})
     let envs = (http get --headers (auth-header) $"((server))/api/v1/environments" | get data | get id)
-    $rows = ($rows | append {facet: 'P1 env test-local', ok: ($envs | any {|e| $e == 'test-local'}), detail: ($envs | str join ',')})
+    $rows = ($rows | append {facet: 'P1 env toolchain', ok: ($envs | any {|e| $e == 'toolchain'}), detail: ($envs | str join ',')})
     let index = (http get $"((server))/" | str contains '<html')
     $rows = ($rows | append {facet: 'P2 SPA index', ok: $index, detail: ''})
     $rows
@@ -105,7 +105,9 @@ def platform-checks []: nothing -> list<record> {
 
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
-    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment test-local --json --server (server) } | complete)
+    # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
+    # ships no nushell; the toolchain env has nu via mise shims.
+    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
     if $created.exit_code != 0 {
         let msg = ($created.stderr | str trim)
         # expect 'refused': admission must REJECT the graph and say why
