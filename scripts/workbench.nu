@@ -25,7 +25,11 @@ const PROBES = [
 ]
 
 def auth-header []: nothing -> record {
-    let token = (open ~/.fabro/auth.json | get servers | get -o (server) | get -o token | default '')
+    # dev-token entries carry `token`; OAuth entries carry `access_token`
+    # (short-lived — the CLI refreshes it; run the bench with a fresh login
+    # window when raw http calls start failing mid-run).
+    let s = (open ~/.fabro/auth.json | get servers | get -o (server))
+    let token = ($s | get -o token | default ($s | get -o access_token | default ''))
     { Authorization: $"Bearer ($token)" }
 }
 
