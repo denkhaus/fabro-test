@@ -12,7 +12,7 @@ digraph Probe01Schema {
     check [
         label="Stdin: reads probe_key",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-01-schema/scripts/check.py",
+        script="nu .fabro/workflows/probe-01-schema/scripts/check.nu",
         stdin_source="probe_key",
         timeout="30s",
         max_retries=0

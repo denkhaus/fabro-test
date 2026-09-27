@@ -13,7 +13,7 @@ publish rid:
 
 # Validate every workflow graph (full admission incl. @-file refs).
 validate target="":
-    @python3 scripts/validate_workflows.py {{target}}
+    @nu scripts/validate_workflows.nu {{target}}
 
 # ONE probe without the full bench (no board clean, no mini/publish).
 #   just probe probe-03-tools           # default expect from the workbench table

@@ -6,7 +6,7 @@ graph = "workflow.fabro"
 [[run.hooks]]
 name = "probe-journal"
 event = "stage_complete"
-script = "python3 .fabro/workflows/probe-05-hooks/scripts/journal.py"
+script = "nu .fabro/workflows/probe-05-hooks/scripts/journal.nu"
 blocking = false
 timeout = "10s"
 sandbox = true

@@ -14,7 +14,7 @@ digraph Probe03Tools {
     verify [
         label="Verify: no file written",
         shape=parallelogram,
-        script="python3 .fabro/workflows/probe-03-tools/scripts/verify.py",
+        script="nu .fabro/workflows/probe-03-tools/scripts/verify.nu",
         output_schema="routing",
         timeout="30s",
         max_retries=0

@@ -1,12 +1,7 @@
-# Local development toolset for the workbench, managed by mise.
 [tools]
-# The issue tracker CLI `seeds`, pinned LOCALLY via mise's cargo
-# backend (crates.io 0.5.0; replaced the npm sd reference tool
-# 2026-09-26 — the ubi backend is deprecated). The workbench's
-# seed-ensure calls it — the repo must not rely on a global install.
-"cargo:seeds" = "0.5.0"
-# Pre-commit secret gate (operator directive 2026-09-26): lefthook
-# runs betterleaks over the staged files. Both come from mise so a
-# fresh checkout works without global installs.
-lefthook = "2.1.14"
-betterleaks = "1.8.1"
+# CI + fresh checkouts: the harness is pure nu (nushell-pro). The seeds
+# tracker CLI comes from dev hosts' global mise / the toolchain image.
+"aqua:nushell/nushell" = "0.115.0"
+# lefthook pre-commit (betterleaks secrets scan) resolves via mise —
+# pinned locally so the hook works in fresh checkouts too.
+"aqua:betterleaks/betterleaks" = "1.8.1"

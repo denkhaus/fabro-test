@@ -70,7 +70,7 @@ digraph Mini {
     tester [
         label="Quality Gate",
         shape=parallelogram,
-        script="python3 -m unittest discover -s tests -v",
+        script="nu tests/test-canonical.nu",
         timeout="3m",
         max_retries=1
     ]
