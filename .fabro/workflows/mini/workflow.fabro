@@ -16,7 +16,7 @@ digraph Mini {
     tracker_guard [
         label="Tracker guard: empty-tracker fast exit",
         shape=parallelogram,
-        script="python3 .fabro/workflows/mini/scripts/tracker_guard.py",
+        script="nu .fabro/workflows/mini/scripts/tracker_guard.nu",
         output_schema="routing",
         timeout="30s",
         max_retries=0
@@ -43,7 +43,7 @@ digraph Mini {
     claim_check [
         label="Claim check: seed id contract",
         shape=parallelogram,
-        script="python3 .fabro/workflows/mini/scripts/claim_check.py",
+        script="nu .fabro/workflows/mini/scripts/claim_check.nu",
         stdin_source="current_seed_id",
         timeout="30s",
         max_retries=0
@@ -79,7 +79,7 @@ digraph Mini {
     evidence [
         label="Evidence",
         shape=parallelogram,
-        script="python3 .fabro/workflows/mini/scripts/evidence.py",
+        script="nu .fabro/workflows/mini/scripts/evidence.nu",
         timeout="1m",
         max_retries=1
     ]
@@ -105,7 +105,7 @@ digraph Mini {
     closeout [
         label="Closeout",
         shape=parallelogram,
-        script="python3 .fabro/workflows/mini/scripts/closeout.py",
+        script="nu .fabro/workflows/mini/scripts/closeout.nu",
         stdin_source="current_seed_id",
         timeout="1m",
         max_retries=1

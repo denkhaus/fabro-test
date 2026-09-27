@@ -222,7 +222,10 @@ def main [] {
 
     print '== workbench: mini integration (seed loop + publish)'
     seed-ensure
-    let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment test-local --json --server $SERVER } | complete)
+    # mini needs the toolchain env since the loop assets are nu and the
+    # closeout is fail-closed on the seeds CLI (seeds-e160): test-local's
+    # buildpack image ships neither.
+    let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment toolchain --json --server $SERVER } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
     let _ = (do { ^$FABRO start $mini_id --server $SERVER } | complete)
