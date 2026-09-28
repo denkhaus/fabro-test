@@ -260,7 +260,7 @@ def seed-ensure []: nothing -> nothing {
     #     uncommitted workbench edit was wiped exactly this way once.
     let dirty0 = (do { git status --porcelain } | complete | get stdout | str trim)
     if ($dirty0 | is-not-empty) { fail $"seed-ensure: workbench tree is dirty — commit or stash first: ($dirty0 | lines | first)" }
-    let fetch = (do { git fetch origin main --quiet } | complete)
+    let fetch = (do { git fetch --prune origin --quiet } | complete)
     if $fetch.exit_code != 0 { fail $"seed-ensure: git fetch: ($fetch.stderr | str trim | str substring 0..200)" }
     let co = (do { git checkout main --quiet } | complete)
     if $co.exit_code != 0 { fail $"seed-ensure: checkout main: ($co.stderr | str trim | str substring 0..200)" }
