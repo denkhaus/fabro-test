@@ -303,10 +303,13 @@ def seed-ensure []: nothing -> nothing {
     if $cm.exit_code != 0 { fail $"seed-ensure: commit: ($cm.stderr | str trim | str substring 0..200)" }
     let push = (do { git push --force-with-lease origin $"($branch):($branch)" --quiet } | complete)
     if $push.exit_code != 0 { fail $"seed-ensure: push ($branch): ($push.stderr | str trim | str substring 0..200)" }
-    # reuse an open PR on the bench branch when a prior dance stalled mid-way
-    let existing = (do { ^gh pr view $branch -R denkhaus/fabro-test --json number,url } | complete)
-    let pr_url = if $existing.exit_code == 0 {
-        $existing.stdout | from json | get url
+    # reuse an OPEN PR on the bench branch when a prior dance stalled mid-way
+    # (gh pr view <branch> also returns CLOSED pull requests — merging one
+    # always fails with 'Base branch was modified')
+    let existing = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state open --json number,url --limit 1 } | complete)
+    let open_prs = if $existing.exit_code == 0 { $existing.stdout | from json } else { [] }
+    let pr_url = if ($open_prs | is-not-empty) {
+        $open_prs | first | get url
     } else {
         let pr_title = 'bench: reset canonical prestate + reopen seed fabro-test-9001'
         let pr_body = 'Deterministic mini-loop prestate: canonical stub reset + fabro-test-9001 re-pinned. Red `tests` by design until the mini run lands the fix. Squash-merge; the workbench resyncs local main afterwards.'
