@@ -11,6 +11,10 @@ run goal="":
 publish rid:
     nu scripts/publish-bridge.nu {{rid}}
 
+# Land dirty workbench script changes on protected main (PR dance, one command).
+land subject:
+    nu scripts/land.nu {{subject}}
+
 # Validate every workflow graph (full admission incl. @-file refs).
 validate target="":
     @nu scripts/validate_workflows.nu {{target}}
