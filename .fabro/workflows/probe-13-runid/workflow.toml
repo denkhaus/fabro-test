@@ -1,0 +1,25 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# Full-history clone: checkpoint publishing bundles the workspace commit
+# and traverses its whole ancestry (fabro-b6c5 / fabro-6558 / mx-9251c9).
+# Pins the config contract the develop/revisor/architect workflows now
+# carry; when this repo's history grows past the depth-100 default, this
+# probe stays green because it is pinned to full history.
+[run.clone]
+depth = 0
+
+[[run.hooks]]
+name = "probe-runid-journal"
+event = "stage_complete"
+script = "nu .fabro/workflows/probe-13-runid/scripts/journal.nu"
+blocking = false
+timeout = "10s"
+sandbox = true
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
