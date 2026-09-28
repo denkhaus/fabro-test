@@ -3,11 +3,11 @@ _version = 1
 [workflow]
 graph = "workflow.fabro"
 
-# KNOWN-RED (fabro-6558 / mx-9251c9): a depth cut below the repo's history
-# kills the run at its FIRST checkpoint — publish_from_sandbox's git bundle
-# silently truncates at the shallow boundary and the host-side snapshot
-# fetch fails. Goes green only when the engine hardens (full-depth sandbox
-# checkout or run-create validation); expect "failed" until then.
+# REGRESSION PIN (was known-red until 2026-09-28): asks for a shallow
+# depth=10 clone. The petri frontend forces the full history whatever the
+# layers ask (fabro-df60 option a, petri 603e40e), so this run MUST
+# succeed; a red probe-14 means the hardening regressed (mx-9251c9 class:
+# the publish bundle silently truncates at a depth cut).
 [run.clone]
 depth = 10
 

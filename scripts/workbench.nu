@@ -22,6 +22,10 @@ const PROBES = [
     [probe-09-envelope-deny failed]
     [probe-11-admission-deny refused]
     [probe-12-tier-shape succeeded]
+    [probe-13-runid succeeded]
+    # probe-14: known-red until the petri full-history checkout hardening
+    # (fabro-df60 option a, petri 603e40e, 2026-09-28); green since.
+    [probe-14-shallow succeeded]
 ]
 
 def auth-header []: nothing -> record {
