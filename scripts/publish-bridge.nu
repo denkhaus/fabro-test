@@ -63,16 +63,27 @@ def main [run_id: string] {
     print '== bridge: creating PR (server path first)'
     let created = (do { ^$FABRO pr create $run_id --model ($env.PR_MODEL? | default 'glm-4.7') --server (server) } | complete)
     if $created.exit_code == 0 {
-        print '== bridge: done (engine-created PR)'
+        let url = ($created.stdout | str trim | lines | last | default '')
+        print $"== bridge: engine PR ($url)"
+        # fabro-4c11 remainder: the engine PR body must be LLM-generated.
+        # The deterministic skeleton notice (EMPTY_BODY_NOTICE in
+        # fabro-workflow/src/pull_request.rs) or an empty body means the
+        # configured PR model still never reaches the client in route form.
+        let body = (do { ^gh pr view $url -R $REPO --json body -q .body } | complete)
+        if $body.exit_code != 0 { fail $"engine PR body fetch failed: ($body.stderr | str trim | str substring 0..200)" }
+        let b = ($body.stdout | str trim)
+        if ($b | is-empty) { fail 'engine PR body is empty — PR-content generation produced nothing (fabro-4c11 class)' }
+        if ($b | str contains 'The LLM did not produce a description') {
+            fail 'engine PR body is the deterministic skeleton — the PR-content model path is still broken (fabro-4c11)'
+        }
+        print $"== bridge: done (engine-created PR, body ($b | str length) chars — generated, not the skeleton)"
         return
     }
-    print $"   server PR path failed — gh fallback: (($created.stderr | str trim) | str substring 0..120)"
-
-    let title = $"Mini run ($run_id) bridge publish"
-    let body = $"Run ($run_id) work from the run snapshot at final commit ($sha). Bridge-created; engine PR generation unavailable."
-    let pr = (ok (do { ^gh pr create -R $REPO --base main --head $"fabro/run/($run_id)" --title $title --body $body } | complete) 'gh pr create')
-    let pr_url = ($pr.stdout | str trim)
-    ok (do { ^gh pr merge -R $REPO --squash --auto $pr_url } | complete) 'gh pr merge'
-    ok (do { ^$FABRO pr link $run_id $pr_url --server (server) } | complete) 'fabro pr link'
-    print $"== bridge: done (gh fallback) — ($pr_url)"
+    # The bench is the engine gate: a gh-fallback PR would mask exactly the
+    # regression class fabro-4c11 pins, so the fallback now fails the bridge.
+    # (Manual repair recipe, kept here on purpose: the snapshot push above
+    # already happened — gh pr create --head fabro/run/<id>, squash --auto,
+    # fabro pr link <run> <url>.)
+    print $"   server PR path failed: (($created.stderr | str trim) | str substring 0..160)"
+    fail "engine PR path unavailable — the bench gate requires it (fabro-4c11 verification); the gh recipe above is for incident repair only"
 }

@@ -254,6 +254,18 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
 # comparable across benches and upstream merges (user directive).
 # ALL tracker mutations go through the seeds app, never manual JSON edits.
 def seed-ensure []: nothing -> nothing {
+    # (0) deterministic base: whatever a half-failed prior dance left behind
+    #     (unpushed commit, stale bench branch), start from origin/main.
+    #     The reset is destructive, so a dirty tree REFUSES to run — an
+    #     uncommitted workbench edit was wiped exactly this way once.
+    let dirty0 = (do { git status --porcelain } | complete | get stdout | str trim)
+    if ($dirty0 | is-not-empty) { fail $"seed-ensure: workbench tree is dirty — commit or stash first: ($dirty0 | lines | first)" }
+    let fetch = (do { git fetch origin main --quiet } | complete)
+    if $fetch.exit_code != 0 { fail $"seed-ensure: git fetch: ($fetch.stderr | str trim | str substring 0..200)" }
+    let co = (do { git checkout main --quiet } | complete)
+    if $co.exit_code != 0 { fail $"seed-ensure: checkout main: ($co.stderr | str trim | str substring 0..200)" }
+    let reset = (do { git reset --hard origin/main --quiet } | complete)
+    if $reset.exit_code != 0 { fail $"seed-ensure: reset to origin/main: ($reset.stderr | str trim | str substring 0..200)" }
     # (a) reset the canonical files to the prestate copies
     cp .fabro/workbench/prestate/canonical.nu bench/canonical.nu
     cp .fabro/workbench/prestate/test-canonical.nu tests/test-canonical.nu
@@ -270,11 +282,65 @@ def seed-ensure []: nothing -> nothing {
     if $upd.exit_code != 0 {
         fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
     }
-    # (c) commit + push the deterministic prestate
-    let _ = (do { git add bench/canonical.nu tests/test-canonical.nu .seeds/issues.jsonl } | complete)
-    let _ = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
-    let _ = (do { git push --quiet } | complete)
-    print '== workbench: canonical seed ensured (fabro-test-9001, fixed wording)'
+    # (c) land the prestate on the PROTECTED main through the PR dance.
+    #     `fabro create` refuses a HEAD that is not on origin (clone-based
+    #     target derivation) and direct pushes are rejected by branch
+    #     protection — so the commit rides: bench branch -> PR -> squash
+    #     merge (--admin) -> local main resynced to the squashed commit.
+    #     Every step is exit-checked: the old silent `git push | complete`
+    #     left an unpushed commit and blocked the mini leg (fabro-4b84).
+    let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
+    if ($dirty | is-empty) {
+        print '== workbench: canonical seed ensured (fabro-test-9001, fixed wording) — prestate already on origin/main'
+        return
+    }
+    let branch = 'bench/prestate'
+    let sw = (do { git checkout -B $branch --quiet } | complete)
+    if $sw.exit_code != 0 { fail $"seed-ensure: branch ($branch): ($sw.stderr | str trim | str substring 0..200)" }
+    let add = (do { git add bench/canonical.nu tests/test-canonical.nu .seeds/issues.jsonl } | complete)
+    if $add.exit_code != 0 { fail $"seed-ensure: git add: ($add.stderr | str trim | str substring 0..200)" }
+    let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
+    if $cm.exit_code != 0 { fail $"seed-ensure: commit: ($cm.stderr | str trim | str substring 0..200)" }
+    let push = (do { git push --force-with-lease origin $"($branch):($branch)" --quiet } | complete)
+    if $push.exit_code != 0 { fail $"seed-ensure: push ($branch): ($push.stderr | str trim | str substring 0..200)" }
+    # reuse an open PR on the bench branch when a prior dance stalled mid-way
+    let existing = (do { ^gh pr view $branch -R denkhaus/fabro-test --json number,url } | complete)
+    let pr_url = if $existing.exit_code == 0 {
+        $existing.stdout | from json | get url
+    } else {
+        let pr_title = 'bench: reset canonical prestate + reopen seed fabro-test-9001'
+        let pr_body = 'Deterministic mini-loop prestate: canonical stub reset + fabro-test-9001 re-pinned. Red `tests` by design until the mini run lands the fix. Squash-merge; the workbench resyncs local main afterwards.'
+        let pr = (do { ^gh pr create -R denkhaus/fabro-test --base main --head $branch --title $pr_title --body $pr_body } | complete)
+        if $pr.exit_code != 0 { fail $"seed-ensure: gh pr create: ($pr.stderr | str trim | str substring 0..200)" }
+        $pr.stdout | str trim
+    }
+    # Required checks must REPORT before --admin may merge. The prestate is
+    # red BY DESIGN (tests fail against the stub; the mini run makes them
+    # green), so wait for every check to be COMPLETED — do not demand green —
+    # then merge with the admin override.
+    mut ready = false
+    for _ in 1..60 {
+        let roll = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json statusCheckRollup } | complete)
+        if $roll.exit_code == 0 {
+            let entries = ($roll.stdout | from json | get -o statusCheckRollup | default [])
+            if ($entries | is-not-empty) {
+                let pending = ($entries | where {|c| ($c | get -o status | default 'COMPLETED') != 'COMPLETED'})
+                if ($pending | is-empty) { $ready = true; break }
+            }
+        }
+        sleep 5sec
+    }
+    if not $ready { fail $"seed-ensure: PR checks never finished reporting: ($pr_url)" }
+    let merge = (do { ^gh pr merge $pr_url -R denkhaus/fabro-test --squash --admin --delete-branch } | complete)
+    if $merge.exit_code != 0 { fail $"seed-ensure: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
+    let f2 = (do { git fetch origin main --quiet } | complete)
+    if $f2.exit_code != 0 { fail $"seed-ensure: refetch: ($f2.stderr | str trim | str substring 0..200)" }
+    let co2 = (do { git checkout main --quiet } | complete)
+    if $co2.exit_code != 0 { fail $"seed-ensure: back to main: ($co2.stderr | str trim | str substring 0..200)" }
+    let reset2 = (do { git reset --hard origin/main --quiet } | complete)
+    if $reset2.exit_code != 0 { fail $"seed-ensure: resync main to origin: ($reset2.stderr | str trim | str substring 0..200)" }
+    let _ = (do { git branch -D $branch } | complete)
+    print $"== workbench: canonical seed ensured (fabro-test-9001, fixed wording) — landed via PR ($pr_url)"
 }
 
 # Single probe run — no board clean, no mini integration.
