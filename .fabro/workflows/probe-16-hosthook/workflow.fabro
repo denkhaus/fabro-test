@@ -1,0 +1,22 @@
+digraph Probe16Hosthook {
+    graph [goal="A host hook reads its context file with the run id", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    emit [
+        label="Emit: trigger the host hook",
+        shape=parallelogram,
+        script="nu -c \"print 'host hook trigger'\"",
+        timeout="30s",
+        max_retries=0
+    ]
+    verify [
+        label="Verify: hook ran clean",
+        shape=parallelogram,
+        script="nu .fabro/workflows/probe-16-hosthook/scripts/verify.nu",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> emit -> verify
+    verify -> exit [label="Hosthook ok"]
+}

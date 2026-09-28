@@ -1,0 +1,23 @@
+digraph Probe15SkillsTwoTokens {
+    graph [goal="Two path-like slash tokens in a stage prompt must not kill the agent session", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    mention [
+        label="Mention: two path-like slash tokens",
+        prompt="@prompts/mention.md",
+        reasoning_effort="low",
+        output_schema="routing",
+        timeout="60s",
+        max_retries=0
+    ]
+    verify [
+        label="Verify: session survived",
+        shape=parallelogram,
+        script="nu .fabro/workflows/probe-15-skills-two-tokens/scripts/verify.nu",
+        output_schema="routing",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> mention -> verify
+    verify -> exit [label="Skills ok"]
+}

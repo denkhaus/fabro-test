@@ -1,0 +1,22 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# Host-side hook (sandbox = false): it runs inside the server container
+# next to the vendored nu. FABRO_HOOK_CONTEXT must name a readable copy of
+# the context with a non-empty run_id — the same contract the sandbox
+# placement offers (petri 5bdb90c, fabro-b714). Exit 1 marks the class the
+# judgment-shadow hook still shows on mirtuell.
+[[run.hooks]]
+name = "probe-hosthook"
+event = "stage_complete"
+script = "nu -c 'let c = (open $env.FABRO_HOOK_CONTEXT); if (($c | get -o run_id | default \"\") | is-empty) { exit 1 } else { exit 0 }'"
+blocking = false
+timeout = "10s"
+sandbox = false
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
