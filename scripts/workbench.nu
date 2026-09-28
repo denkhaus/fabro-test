@@ -195,7 +195,9 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     ensure-sync
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
-    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
+    # expect rides as a LABEL: a failed run in the list must be recognizable
+    # as red-by-design from the outside (bench probes 06/09/15 fail on purpose)
+    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --label $"expect=($expect)" --environment toolchain --json --server (server) } | complete)
     if $created.exit_code != 0 {
         let msg = ($created.stderr | str trim)
         # expect 'refused': admission must REJECT the graph and say why
