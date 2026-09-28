@@ -22,6 +22,18 @@ const PROBES = [
     [probe-09-envelope-deny failed]
     [probe-11-admission-deny refused]
     [probe-12-tier-shape succeeded]
+    [probe-13-runid succeeded]
+    # probe-14: known-red until the petri full-history checkout hardening
+    # (fabro-df60 option a, petri 603e40e, 2026-09-28); green since.
+    [probe-14-shallow succeeded]
+    # probe-15: two path-like /tokens in a stage prompt must not kill the
+    # agent session (fabro-3fce: pebble's skill expansion fired on
+    # harness-assembled input; a red probe-15 means the class is back).
+    [probe-15-skills-two-tokens succeeded]
+    # probe-16: a sandbox=false hook must read FABRO_HOOK_CONTEXT with a
+    # non-empty run id (petri 5bdb90c, fabro-b714). The workbench also
+    # checks the run's hook notes for a failed host hook.
+    [probe-16-hosthook succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -110,6 +122,55 @@ def platform-checks []: nothing -> list<record> {
     $rows = ($rows | append {facet: 'P1 env toolchain', ok: ($envs | any {|e| $e == 'toolchain'}), detail: ($envs | str join ',')})
     let index = (http get $"((server))/" | str contains '<html')
     $rows = ($rows | append {facet: 'P2 SPA index', ok: $index, detail: ''})
+
+    # Run titles take zai's small default, and that model must be the one
+    # the fork declares structured output for (glm-4.7). A red row means
+    # every run title falls back to the deterministic goal text
+    # (fabro-d5b1: the title path was refused, "model zai/glm-5.3 does not
+    # support structured output").
+    let small = ($models | where small_default == true | first | default null)
+    $rows = ($rows | append {
+        facet:  'P1 run-title model is the structured small default'
+        ok:     (($small | get -o id | default '') == 'glm-4.7')
+        detail: ($"small_default=($small | get -o id | default 'none')")
+    })
+
+    # A replace that omits on_overlap must not wipe it: the UI's toggle
+    # sends exactly that payload and silently cleared the conductor's skip
+    # (fabro-2093). The scratch automation is deleted again either way.
+    let scratch = (do {
+        # Idempotent: a previous bench (or this one after a failure) may have
+        # left the scratch automation behind. The LIST never 404s; a direct
+        # GET on a missing id would abort the whole workbench.
+        let existing = (http get --headers (auth-header) $"((server))/api/v1/automations" | get data | get id)
+        if ('bench-on-overlap-probe' in $existing) {
+            let stale = (http get --headers (auth-header) $"((server))/api/v1/automations/bench-on-overlap-probe")
+            let stale_headers = ((auth-header) | merge {"If-Match": $"\"($stale.revision)\""})
+            let _ = (do -i { http delete --headers $stale_headers $"((server))/api/v1/automations/bench-on-overlap-probe" })
+        }
+        let created = (http post --headers (auth-header) -t 'application/json'
+            $"((server))/api/v1/automations"
+            ({id: 'bench-on-overlap-probe', name: 'bench-on-overlap-probe', environment_id: 'toolchain',
+              target: {kind: 'git', repo: 'denkhaus/fabro-test', branch: 'main'}, workflow: 'probe-13-runid',
+              triggers: [{type: 'api', id: 'manual', enabled: true}]} | to json -r))
+        let rev = ($created | get -o revision | default '')
+        let body = ({name: $created.name, environment_id: $created.environment_id, target: $created.target,
+                     workflow: $created.workflow, triggers: $created.triggers} | to json -r)
+        let put_headers = ((auth-header) | merge {"If-Match": $"\"($rev)\""})
+        let _ = (http put --headers $put_headers -t 'application/json'
+            $"((server))/api/v1/automations/bench-on-overlap-probe" $body)
+        let after = (http get --headers (auth-header) $"((server))/api/v1/automations/bench-on-overlap-probe")
+        let overlap = ($after | get -o on_overlap | default 'none')
+        let delete_headers = ((auth-header) | merge {"If-Match": $"\"($rev)\""})
+        let _ = (http delete --headers $delete_headers
+            $"((server))/api/v1/automations/bench-on-overlap-probe")
+        $overlap
+    })
+    $rows = ($rows | append {
+        facet:  'P1 automation replace keeps on_overlap'
+        ok:     ($scratch == 'skip')
+        detail: ($"on_overlap after a bare replace: ($scratch)")
+    })
     $rows
 }
 
@@ -167,6 +228,22 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
         let deadlocked = ($reason | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+    }
+    if $ok and $name == 'probe-16-hosthook' {
+        # The host hook (sandbox = false) must have read a context file with
+        # a non-empty run id. Its exit code shows up in the run's hook notes
+        # as a failed hook; a green probe means the file contract holds
+        # (petri 5bdb90c, fabro-b714) - the judgment-shadow hook on mirtuell
+        # still shows the failure this check names.
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let notes = ($evs | where {|e| (($e | item | to json -r) | str contains 'probe-hosthook')})
+        let failed = ($notes | where {|e| ((($e | item | to json -r) | str contains 'hook exited with code') )})
+        let ran = ($notes | where {|e| ((($e | item | to json -r) | str contains '"state":"executed"'))})
+        return {
+            facet:  $name
+            ok:     ((($failed | length) == 0) and (($ran | length) > 0))
+            detail: ($detail + $" | hook notes=($notes | length) ran=($ran | length) failed=($failed | length)")
+        }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }
