@@ -1,0 +1,13 @@
+digraph Probe14Shallow {
+    graph [goal="Known-red: a shallow clone dies at its first checkpoint until the engine hardens", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    emit [
+        label="Emit: trigger the hook",
+        shape=parallelogram,
+        script="nu -c \"print 'hook trigger'\"",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> emit -> exit
+}

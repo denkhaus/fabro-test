@@ -1,0 +1,25 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# KNOWN-RED (fabro-6558 / mx-9251c9): a depth cut below the repo's history
+# kills the run at its FIRST checkpoint — publish_from_sandbox's git bundle
+# silently truncates at the shallow boundary and the host-side snapshot
+# fetch fails. Goes green only when the engine hardens (full-depth sandbox
+# checkout or run-create validation); expect "failed" until then.
+[run.clone]
+depth = 10
+
+[[run.hooks]]
+name = "probe-runid-journal"
+event = "stage_complete"
+script = "nu .fabro/workflows/probe-13-runid/scripts/journal.nu"
+blocking = false
+timeout = "10s"
+sandbox = true
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
