@@ -236,9 +236,9 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         # (petri 5bdb90c, fabro-b714) - the judgment-shadow hook on mirtuell
         # still shows the failure this check names.
         let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
-        let notes = ($evs | where {|e| (($e | item | to json -r) | str contains 'probe-hosthook')})
-        let failed = ($notes | where {|e| ((($e | item | to json -r) | str contains 'hook exited with code') )})
-        let ran = ($notes | where {|e| ((($e | item | to json -r) | str contains '"state":"executed"'))})
+        let notes = ($evs | where {|e| (($e | get item | to json -r) | str contains 'probe-hosthook')})
+        let failed = ($notes | where {|e| ((($e | get item | to json -r) | str contains 'hook exited with code'))})
+        let ran = ($notes | where {|e| ((($e | get item | to json -r) | str contains '"state":"executed"'))})
         return {
             facet:  $name
             ok:     ((($failed | length) == 0) and (($ran | length) > 0))
