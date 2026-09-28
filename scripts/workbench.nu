@@ -447,7 +447,7 @@ def main [] {
         exit 1
     }
     if ($red | is-not-empty) {
-        print -e $"WORKBENCH YELLOW: ($red | length) known-red facets — tracked seeds (fabro-1a41, guards investigation)"
+        print -e $"WORKBENCH YELLOW: ($red | length) known-red facets — tracked seeds: fabro-2093 on_overlap, fabro-3fce probe-15, fabro-4c11 publish body"
     }
     print 'WORKBENCH done — no new failures'
 }
