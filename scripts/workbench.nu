@@ -174,8 +174,25 @@ def platform-checks []: nothing -> list<record> {
     $rows
 }
 
+# A run PR auto-merging MID-BENCH moves origin/main; the next cwd-based
+# create then refuses (target derivation demands local HEAD == origin tip —
+# running a stale ancestor silently would probe old code). Resync before
+# every create; a dirty tree is left alone so the refusal stays loud.
+def ensure-sync []: nothing -> nothing {
+    let f = (do { git fetch --prune origin --quiet } | complete)
+    if $f.exit_code != 0 { return }
+    let local = (do { git rev-parse HEAD } | complete | get stdout | str trim)
+    let remote = (do { git rev-parse origin/main } | complete | get stdout | str trim)
+    let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
+    if ($local != $remote) and ($dirty | is-empty) {
+        let _ = (do { git checkout main --quiet; git reset --hard origin/main --quiet } | complete)
+        print $"== workbench: resynced to moved origin/main"
+    }
+}
+
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
+    ensure-sync
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
     let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
@@ -187,7 +204,9 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
             let named = ($msg | str contains 'x_attribute_known') or ($msg | str contains 'unknown attribute')
             return {facet: $name, ok: $named, detail: ($msg | str substring 0..140)}
         }
-        return {facet: $name, ok: false, detail: ($msg | str substring 0..140)}
+        # stderr starts with the benign project.toml warning — the real
+        # refusal follows; show the TAIL
+        return {facet: $name, ok: false, detail: ($msg | str substring (-160)..)}
     }
     if $expect == 'refused' {
         return {facet: $name, ok: false, detail: 'expected an admission refusal, but create succeeded'}
@@ -403,6 +422,7 @@ def main [] {
     # mini needs the toolchain env since the loop assets are nu and the
     # closeout is fail-closed on the seeds CLI (seeds-e160): test-local's
     # buildpack image ships neither.
+    ensure-sync
     let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
