@@ -343,7 +343,7 @@ def seed-ensure []: nothing -> nothing {
     let reset2 = (do { git reset --hard origin/main --quiet } | complete)
     if $reset2.exit_code != 0 { fail $"seed-ensure: resync main to origin: ($reset2.stderr | str trim | str substring 0..200)" }
     let _ = (do { git branch -D $branch } | complete)
-    print $"== workbench: canonical seed ensured (fabro-test-9001, fixed wording) — landed via PR ($pr_url)"
+    print $"== workbench: canonical seed ensured — fabro-test-9001 re-pinned, landed via PR ($pr_url)"
 }
 
 # Single probe run — no board clean, no mini integration.
