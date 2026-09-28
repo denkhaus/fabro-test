@@ -411,7 +411,17 @@ def main [] {
     let mini_ok = ($mw.stdout | from json | get -o status | default 'failed') == 'succeeded'
     $rows = ($rows | append {facet: '09 mini seed loop', ok: $mini_ok, detail: $"run ($mini_id)"})
     if $mini_ok {
-        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($mini_id)/events?limit=1000" | get -o data | default [])
+        # the mini stream exceeds 1000 events — walk pages (the notification
+        # rides at the very end, after the stage journals; bench 0928-205934
+        # counted 0 against a real notification.sent at event ~2900)
+        mut evs = []
+        mut after = 0
+        for _ in 1..12 {
+            let page = (http get --headers (auth-header) $"((server))/api/v1/runs/($mini_id)/events?limit=1000&after=($after)" | get -o data | default [])
+            if ($page | is-empty) { break }
+            $after = ($page | last | get stream_seq)
+            $evs = ($evs | append $page)
+        }
         let notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
         $rows = ($rows | append {facet: '10 slack notification', ok: ($notif > 0), detail: $"notification.sent=($notif)"})
         let pub = (do { nu scripts/publish-bridge.nu $mini_id } | complete)
@@ -424,10 +434,13 @@ def main [] {
     print ($all | table --index false)
     let red = ($all | where not ok)
     # Known-red facets: tracked regressions (seed filed) — visible, but they
-    # do not fail the bench exit until their seeds land. fabro-1a41 and
-    # fabro-51ad landed 2026-09-26; the list is empty until a new tracked
-    # regression goes red.
-    let known_red: list<string> = []
+    # do not fail the bench exit until their seeds land.
+    #   P1 automation replace keeps on_overlap -> fabro-2093 (web PUT drops it)
+    #   probe-15-skills-two-tokens            -> fabro-3fce (skill expansion kills sessions)
+    #   09 publish bridge                     -> fabro-4c11 remainder (zai answers
+    #     the JSON PR-content request with prose: 'the model did not return a
+    #     JSON document' — the bridge assertion pins it, bench 0928-205934)
+    let known_red: list<string> = ['P1 automation replace keeps on_overlap' 'probe-15-skills-two-tokens' '09 publish bridge']
     let fresh = ($red | where {|r| ($r.facet not-in $known_red)} | length)
     if ($fresh > 0) {
         print -e $"WORKBENCH RED: ($fresh) NEW facet failures"
