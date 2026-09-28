@@ -278,9 +278,17 @@ def seed-ensure []: nothing -> nothing {
         let _ = (do { ^mise exec -- seeds close ...$others --reason 'bench: canonical-seed exclusivity (one bench seed per run)' } | complete)
     }
     let desc = 'Replace the error-make stub in bench/canonical.nu so it prints the exact string canonical-ok-9001 (tracked acceptance: tests/test-canonical.nu). Acceptance: nu tests/test-canonical.nu is green and the stub is gone.'
-    let upd = (do { ^mise exec -- seeds update fabro-test-9001 --status open --title 'Implement canonical_mark in bench/canonical.nu' --description $desc } | complete)
-    if $upd.exit_code != 0 {
-        fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
+    # idempotent re-pin: `seeds update` always rewrites updatedAt, which would
+    # dirty the tree on every bench run and force a pointless prestate PR —
+    # update only when title or status actually deviate
+    let cur = (do { ^mise exec -- seeds show fabro-test-9001 --format json } | complete)
+    let issue = if $cur.exit_code == 0 { $cur.stdout | from json | get -o issue | default {} } else { {} }
+    let pinned = (($issue | get -o title | default '') == 'Implement canonical_mark in bench/canonical.nu') and (($issue | get -o status | default '') == 'open')
+    if not $pinned {
+        let upd = (do { ^mise exec -- seeds update fabro-test-9001 --status open --title 'Implement canonical_mark in bench/canonical.nu' --description $desc } | complete)
+        if $upd.exit_code != 0 {
+            fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
+        }
     }
     # (c) land the prestate on the PROTECTED main through the PR dance.
     #     `fabro create` refuses a HEAD that is not on origin (clone-based
