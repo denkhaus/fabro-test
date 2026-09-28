@@ -22,7 +22,13 @@ def main [subject: string]: nothing -> nothing {
     let add = (do { git add scripts/ justfile } | complete)
     if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
     let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
-    if ($dirty | is-empty) { fail 'land: nothing to commit — pass the edit BEFORE running land' }
+    if ($dirty | is-empty) {
+        # retry semantics: a prior land may have committed+pushed already and
+        # died on a transient GitHub 504 — continue when the branch carries
+        # commits beyond origin/main, refuse only when there is truly nothing
+        let ahead = (do { git log origin/main..HEAD --oneline } | complete | get stdout | str trim)
+        if ($ahead | is-empty) { fail 'land: nothing to commit — pass the edit BEFORE running land' }
+    }
     let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $subject --quiet } | complete)
     if $cm.exit_code != 0 { fail $"land: commit: ($cm.stderr | str trim | str substring 0..200)" }
     let pf = (do { git fetch --prune origin --quiet } | complete)
@@ -52,7 +58,13 @@ def main [subject: string]: nothing -> nothing {
     }
     if not $ready { fail $"land: PR checks never finished reporting: ($pr_url)" }
     let merge = (do { ^gh pr merge $pr_url -R denkhaus/fabro-test --squash --admin --delete-branch } | complete)
-    if $merge.exit_code != 0 { fail $"land: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
+    if $merge.exit_code != 0 {
+        # a 504 can time out the RESPONSE while the merge itself succeeds —
+        # verify the PR state before declaring failure
+        let st = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json state } | complete)
+        let state = if $st.exit_code == 0 { $st.stdout | from json | get -o state | default '' } else { '' }
+        if $state != 'MERGED' { fail $"land: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
+    }
     let co = (do { git checkout main --quiet } | complete)
     if $co.exit_code != 0 { fail $"land: back to main: ($co.stderr | str trim | str substring 0..200)" }
     let f2 = (do { git fetch --prune origin --quiet } | complete)

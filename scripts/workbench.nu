@@ -335,7 +335,13 @@ def seed-ensure []: nothing -> nothing {
     }
     if not $ready { fail $"seed-ensure: PR checks never finished reporting: ($pr_url)" }
     let merge = (do { ^gh pr merge $pr_url -R denkhaus/fabro-test --squash --admin --delete-branch } | complete)
-    if $merge.exit_code != 0 { fail $"seed-ensure: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
+    if $merge.exit_code != 0 {
+        # a 504 can time out the RESPONSE while the merge itself succeeds —
+        # verify the PR state before declaring failure
+        let st = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json state } | complete)
+        let state = if $st.exit_code == 0 { $st.stdout | from json | get -o state | default '' } else { '' }
+        if $state != 'MERGED' { fail $"seed-ensure: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
+    }
     let f2 = (do { git fetch origin main --quiet } | complete)
     if $f2.exit_code != 0 { fail $"seed-ensure: refetch: ($f2.stderr | str trim | str substring 0..200)" }
     let co2 = (do { git checkout main --quiet } | complete)
