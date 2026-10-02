@@ -19,7 +19,9 @@ def main [subject: string]: nothing -> nothing {
     let branch = 'bench/workbench'
     let sw = (do { git checkout -B $branch --quiet } | complete)
     if $sw.exit_code != 0 { fail $"land: branch: ($sw.stderr | str trim | str substring 0..200)" }
-    let add = (do { git add scripts/ justfile } | complete)
+    # .fabro/workflows rides along: probe rigs are bench assets landing
+    # through the same dance (fabro-70af probes 17-19, 2026-10-02).
+    let add = (do { git add scripts/ justfile .fabro/workflows } | complete)
     if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
     let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
     if ($dirty | is-empty) {

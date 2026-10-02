@@ -1,0 +1,24 @@
+digraph Probe17PreambleContract {
+    graph [goal="Filtered preamble: allowed context key visible, hidden key and ignored stage absent"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    noisy [
+        label="Noisy: emits kept and hidden context keys",
+        prompt="@prompts/noisy.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3
+    ]
+    reader [
+        label="Reader: filtered preamble",
+        prompt="@prompts/reader.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.preamble_stages_ignore="noisy",
+        x.context_allow_keys="contract_kept"
+    ]
+    start -> noisy [label="Go"]
+    noisy -> reader [label="Emitted"]
+    reader -> exit [label="Contract ok"]
+}

@@ -1,0 +1,24 @@
+digraph Probe18PreambleBudgets {
+    graph [goal="Capped preamble: early filler lines visible, late filler lines truncated away"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    noisy [
+        label="Noisy: emits exactly twenty filler lines",
+        prompt="@prompts/noisy.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3
+    ]
+    reader [
+        label="Reader: capped preamble",
+        prompt="@prompts/reader.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.preamble_output_max_lines=5,
+        x.preamble_budget_kb=2
+    ]
+    start -> noisy [label="Go"]
+    noisy -> reader [label="Emitted"]
+    reader -> exit [label="Budget ok"]
+}
