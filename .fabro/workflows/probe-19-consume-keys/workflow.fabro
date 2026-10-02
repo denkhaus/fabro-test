@@ -1,0 +1,31 @@
+digraph Probe19ConsumeKeys {
+    graph [goal="Consumed context key: visible to its consumer, absent afterwards"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    producer [
+        label="Producer: emits the consume target",
+        prompt="@prompts/producer.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3
+    ]
+    consumer [
+        label="Consumer: sees the key once, then consumes it",
+        prompt="@prompts/consumer.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3,
+        x.context_consume_keys="consume_target"
+    ]
+    checker [
+        label="Checker: key must be gone",
+        prompt="@prompts/checker.md",
+        output_schema="routing",
+        output_retries=2,
+        max_visits=3
+    ]
+    start -> producer [label="Go"]
+    producer -> consumer [label="Emitted"]
+    consumer -> checker [label="Consumed"]
+    checker -> exit [label="Consume ok"]
+}
