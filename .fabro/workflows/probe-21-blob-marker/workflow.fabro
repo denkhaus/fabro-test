@@ -1,0 +1,14 @@
+digraph Probe21BlobMarker {
+    // PIN (fabro-d774, fixed): a large command output demotes to a blob
+    // reference whose marker advertises size and line count, and the next
+    // agent stage pages through it via read_file offset/limit.
+    graph [goal="Probe the blob demotion marker for a large value", retry_target=exit]
+    rankdir=LR
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    big  [shape=parallelogram, script="awk 'BEGIN{s=\"\";for(i=0;i<60000;i++)s=s \"0123456789\";print s}'", max_retries=0]
+    ask  [label="Ask", prompt="@prompts/ask.md", reasoning_effort="low"]
+    start -> big
+    big -> ask
+    ask -> exit
+}

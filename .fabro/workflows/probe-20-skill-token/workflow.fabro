@@ -1,0 +1,16 @@
+digraph Probe20SkillToken {
+    // PIN (fabro-68d3, fixed): a prompt that MENTIONS an unknown
+    // slash-command token mid-text must not kill the session before the
+    // first LLM call — the agent answers normally instead.
+    graph [goal="Survive a prompt that mentions an unknown slash command", retry_target=exit]
+    rankdir=LR
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+    stage [
+        label="Mention",
+        prompt="@prompts/mention.md",
+        reasoning_effort="low"
+    ]
+    start -> stage
+    stage -> exit
+}
