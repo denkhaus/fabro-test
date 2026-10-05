@@ -1,0 +1,17 @@
+# fabro-68d3 pin (moved from the fabro repo's repro harness 2026-10-05):
+# unknown mid-text /word token in a stage prompt must survive to a normal
+# answer (the pre-fix bug failed the session structurally with 'expanding
+# a skill reference' before any LLM call).
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

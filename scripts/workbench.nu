@@ -26,6 +26,8 @@ const PROBES = [
     [probe-17-preamble-contract succeeded]
     [probe-18-preamble-budgets succeeded]
     [probe-19-consume-keys succeeded]
+    [probe-20-skill-token succeeded]
+    [probe-21-blob-marker succeeded]
     [probe-12-tier-shape succeeded]
     [probe-13-runid succeeded]
     # probe-14: known-red until the petri full-history checkout hardening

@@ -1,0 +1,17 @@
+# fabro-d774 pin (moved from the fabro repo's repro harness 2026-10-05):
+# the demotion marker must advertise byte size AND line count; the agent
+# stage pages through the blob via read_file offset/limit and the run ends
+# green.
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
