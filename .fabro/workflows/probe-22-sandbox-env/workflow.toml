@@ -1,0 +1,17 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# Diagnostic probe (fabro-114c): the develop gate's git-identity pin failed
+# ONLY inside real run sandboxes (toolchain env, production host) while the
+# same tree passed in isolated image reproductions. This probe captures the
+# missing datum: the run sandbox's FULL environment, the effective git
+# config with origins, the ambient commit identity of a scratch commit with
+# nothing configured, and the run branch's own checkpoint identities as the
+# sandbox sees them. Evidence rides the stage log; the bench table only
+# asserts the capture completed.
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

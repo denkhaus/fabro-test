@@ -41,6 +41,10 @@ const PROBES = [
     # non-empty run id (petri 5bdb90c, fabro-b714). The workbench also
     # checks the run's hook notes for a failed host hook.
     [probe-16-hosthook succeeded]
+    # probe-22: diagnostic capture (fabro-114c) — the run sandbox's full
+    # env, effective git config, ambient scratch-commit identity, and the
+    # run branch's checkpoint identities, echoed into the run log.
+    [probe-22-sandbox-env succeeded]
 ]
 
 def auth-header []: nothing -> record {
