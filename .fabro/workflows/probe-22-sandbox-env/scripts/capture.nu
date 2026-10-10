@@ -9,7 +9,7 @@ const OUT = '/tmp/probe22'
 def main []: nothing -> nothing {
     let workspace = $env.PWD
     mkdir $OUT
-    env | items {|k, v| $"($k)=($v)" } | sort | str join "\n" | save --raw $"($OUT)/env.txt"
+    $env | items {|k, v| $"($k)=($v)" } | sort | str join "\n" | save --raw $"($OUT)/env.txt"
 
     let cfg = (do { git config -l --show-origin } | complete)
     $cfg.stdout | save --raw $"($OUT)/gitconfig.txt"
