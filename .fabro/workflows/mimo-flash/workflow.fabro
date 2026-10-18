@@ -1,0 +1,19 @@
+digraph MiMoFlash {
+    graph [
+        goal="Answer the prompt once with the OpenRouter MiMo flash model",
+        rankdir=LR
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    // Single LLM call, no tools: the model under test (openrouter,
+    // xiaomi/mimo-v2.6-flash) is pinned in workflow.toml [run.model].
+    mimo [
+        label="MiMo v2.6 Flash",
+        shape=tab,
+        prompt="Antworte auf Deutsch mit genau zwei Saetzen: Was ist 17*23, und welches Modell bist du deiner Meinung nach?"
+    ]
+
+    start -> mimo -> exit
+}

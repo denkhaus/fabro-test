@@ -1,0 +1,11 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# The LLM node runs on OpenRouter's xiaomi/mimo-v2.6-flash. The model is not
+# in the built-in catalog, so it rides openrouter's allow_passthrough; the
+# provider pin keeps selection from drifting to another offering.
+[run.model]
+name = "xiaomi/mimo-v2.6-flash"
+provider = "openrouter"
