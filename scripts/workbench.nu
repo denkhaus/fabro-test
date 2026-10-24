@@ -153,6 +153,15 @@ def platform-checks []: nothing -> list<record> {
     $rows = ($rows | append {facet: 'P1 zai glm-4.7 configured', ok: ($glm != null and ($glm | get -o configured | default false)), detail: ''})
     let envs = (http get --headers (auth-header) $"((server))/api/v1/environments" | get data | get id)
     $rows = ($rows | append {facet: 'P1 env toolchain', ok: ($envs | any {|e| $e == 'toolchain'}), detail: ($envs | str join ',')})
+    # The toolchain env MUST inject git's safe.directory: the sandbox
+    # workspace arrives uid-mapped (engine-delivered checkout, fabro-b6c5
+    # pass 3) while stage scripts exec as root — without the injection
+    # every in-sandbox git refuses the repo (dubious ownership) and the
+    # git-evidence probes go red (bench 1024-191510, probe-22; production
+    # has carried the trio since the same finding).
+    let tcenv = (http get --headers (auth-header) $"((server))/api/v1/environments/toolchain" | get -o env | default {})
+    let injected = (($tcenv | get -o GIT_CONFIG_KEY_0 | default '') == 'safe.directory') and (($tcenv | get -o GIT_CONFIG_VALUE_0 | default '') == '*') and (($tcenv | get -o GIT_CONFIG_COUNT | default '') == '1')
+    $rows = ($rows | append {facet: 'P1 toolchain env injects git safe.directory', ok: $injected, detail: ($tcenv | to json -r)})
     let index = (http get $"((server))/" | str contains '<html')
     $rows = ($rows | append {facet: 'P2 SPA index', ok: $index, detail: ''})
 
@@ -439,9 +448,9 @@ def seed-ensure []: nothing -> nothing {
     let issue = if $cur.exit_code == 0 { $cur.stdout | from json | get -o issue | default {} } else { {} }
     let pinned = (($issue | get -o title | default '') == 'Implement canonical_mark in bench/canonical.nu') and (($issue | get -o status | default '') == 'open')
     if not $pinned {
-        let upd = (do { ^mise exec -- seeds update fabro-test-9001 --status open --title 'Implement canonical_mark in bench/canonical.nu' --description $desc } | complete)
+        let upd = (do { ^mise exec -- seeds update fabro-test-9001 --status open --title 'Implement canonical_mark in bench/canonical.nu' --set-description $desc } | complete)
         if $upd.exit_code != 0 {
-            fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history (fixed id; seeds create cannot mint it)"
+            fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history, fixed id; seeds create cannot mint it"
         }
     }
     # (c) land the prestate on the PROTECTED main through the PR dance.
