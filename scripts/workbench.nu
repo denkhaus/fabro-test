@@ -181,9 +181,13 @@ def platform-checks []: nothing -> list<record> {
             let stale_headers = ((auth-header) | merge {"If-Match": $"\"($stale.revision)\""})
             let _ = (do -i { http delete --headers $stale_headers $"((server))/api/v1/automations/bench-on-overlap-probe" })
         }
+        # work_project names the registered bench project (f1a9: create
+        # refuses without one). The REPLACE body below omits it on purpose:
+        # a replace keeps the stored binding — the f1a9 pin, proven here.
         let created = (http post --headers (auth-header) -t 'application/json'
             $"((server))/api/v1/automations"
             ({id: 'bench-on-overlap-probe', name: 'bench-on-overlap-probe', environment_id: 'toolchain',
+              work_project: 'fabro-proof',
               target: {kind: 'git', repo: 'denkhaus/fabro-test', branch: 'main'}, workflow: 'probe-13-runid',
               triggers: [{type: 'api', id: 'manual', enabled: true}]} | to json -r))
         let rev = ($created | get -o revision | default '')
@@ -364,7 +368,12 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
 # (3) report live claims — a stuck claim from a crashed run shrinks the
 #     claimable pool; released by the 30-min orphan arm if the API path
 #     cannot (fabro-9166). Logged, never fatal: the pool has two items.
-def proof-ensure []: nothing -> nothing {
+# The bench's work project (fabro-proof on the central tracker). MUST run
+# before anything creates an automation: since f1a9 (fork.25) an automation
+# create refuses without a REGISTERED work_project
+# (automation_work_project_required) — the platform checks create a scratch
+# automation, so the project has to exist first.
+def project-ensure []: nothing -> nothing {
     let body = {
         displayName: 'Fabro Proof'
         trackerProvider: 'github'
@@ -378,8 +387,12 @@ def proof-ensure []: nothing -> nothing {
     }
     let put = (try { http put --headers (auth-header) $"(server)/api/v1/projects/fabro-proof" --content-type application/json ($body | to json -r) } catch {|err| null })
     if $put == null {
-        print 'proof-ensure: project upsert failed (bench continues; the work probes will name it)'
+        print 'project-ensure: fabro-proof upsert failed — automation creates will refuse (automation_work_project_required)'
     }
+}
+
+def proof-ensure []: nothing -> nothing {
+    project-ensure
     for n in [3 4] {
         let st = (do { ^gh issue view $n --repo denkhaus/work --json state --jq state } | complete | get stdout | str trim)
         if $st == 'CLOSED' {
@@ -390,7 +403,7 @@ def proof-ensure []: nothing -> nothing {
     let claims = (try { http get --headers (auth-header) $"(server)/api/v1/projects/fabro-proof/claims" } catch {|err| {data: []} })
     let live = ($claims | get -o data | default [] | length)
     if $live > 0 {
-        print $"proof-ensure: ($live) live claim(s) on fabro-proof (orphan arm heals in <=30m if stuck)"
+        print $"proof-ensure: ($live) live claims on fabro-proof — orphan arm heals in 30m or less if stuck"
     }
 }
 
@@ -529,6 +542,8 @@ def main [] {
     clean-runs
     let bench_id = (date now | format date '%m%d-%H%M%S')
     print $"== workbench: bench=($bench_id)"
+    # f1a9 world: the scratch automation create needs a registered project
+    project-ensure
     print '== workbench: platform checks'
     let prows = (platform-checks)
     print ($prows | table --index false)
