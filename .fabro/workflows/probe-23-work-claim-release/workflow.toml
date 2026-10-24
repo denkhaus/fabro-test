@@ -1,0 +1,26 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# probe-23 (fabro-6041): the work-item line end to end, WITHOUT seeds.
+# The agent calls fabro_work_next (lane 'proof') — the server resolves the
+# run target denkhaus/fabro-test to project fabro-proof (targetRepo
+# fallback for manual runs; the production proof automation instead carries
+# an explicit work_project reference once fork.25 ships) — and then returns
+# the claim with fabro_work_release. Green = grant + label projection +
+# release all worked against the CENTRAL tracker denkhaus/work.
+# The bench additionally asserts work.claimed AND work.released in the run
+# events — a run that never claims (empty lane) or cannot release
+# (fabro-9166 class) is RED, not green-vacuous.
+[run.agent]
+fabro_tools = true
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

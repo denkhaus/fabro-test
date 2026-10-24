@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "probe-23 work claim-release routing output",
+  "description": "Routing contract for the work-line probe: the agent reports whether the claim+release roundtrip through the run tools worked. context_updates carry the granted claim id and item key for the bench's event correlation.",
+  "type": "object",
+  "required": [
+    "outcome",
+    "preferred_next_label"
+  ],
+  "properties": {
+    "outcome": {
+      "type": "string"
+    },
+    "preferred_next_label": {
+      "type": "string",
+      "enum": [
+        "Released",
+        "Empty",
+        "Failed"
+      ]
+    },
+    "failure_reason": {
+      "type": "string"
+    },
+    "context_updates": {
+      "type": "object",
+      "properties": {
+        "claim_id": {
+          "type": "string"
+        },
+        "item_key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

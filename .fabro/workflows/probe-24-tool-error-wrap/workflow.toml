@@ -1,0 +1,27 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# probe-24 (fabro-6041, the c98c seam): tool-result error-flag handling on
+# the DEPLOYED profile path. The agent forces exactly two failing
+# fabro_run_search calls (invalid arguments — the mimo incident class);
+# every follow-up request must render the error-flagged tool result into
+# content ('[TOOL ERROR] ...') for openai-wire profiles (zai resolves to
+# the OpenAi profile kind), so the provider wire never has to DROP the
+# flag. The bench asserts: >= 2 invalid_arguments tool errors in the run
+# events AND zero 'unsupported_control' Warning events.
+# KNOWN-RED until the real fix lands (production fork.24 evidence
+# 2026-10-24: the warning still fires 4x on the live zai planner) — a red
+# row blocks the next deploy window per the FACETS rule (fabro-6041 N3).
+[run.agent]
+fabro_tools = true
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

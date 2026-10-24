@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "probe-24 tool-error-wrap routing output",
+  "description": "Routing contract for the wire-behavior probe: the agent reports whether it produced two failing run-tool calls. The bench cross-checks the run events for the invalid_arguments errors and for the absence of unsupported_control warnings.",
+  "type": "object",
+  "required": [
+    "outcome",
+    "preferred_next_label"
+  ],
+  "properties": {
+    "outcome": {
+      "type": "string"
+    },
+    "preferred_next_label": {
+      "type": "string",
+      "enum": [
+        "Done",
+        "Failed"
+      ]
+    },
+    "failure_reason": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

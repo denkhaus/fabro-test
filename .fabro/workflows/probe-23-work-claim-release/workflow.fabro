@@ -1,0 +1,28 @@
+digraph Probe23WorkClaimRelease {
+    graph [
+        goal="Claim one proof work item via fabro_work_next and release it via fabro_work_release",
+        default_max_retries=0,
+        max_node_visits=6,
+        stall_timeout="5m",
+        rankdir=LR
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    work [
+        label="Work: claim then release",
+        prompt="@prompts/work.md",
+        output_schema="@schemas/work-output.schema.json",
+        output_retries=2,
+        max_visits=4,
+        retry_policy="standard",
+        x.fabro_tools="fabro_work_next,fabro_work_release",
+        x.tools="read_file"
+    ]
+
+    start -> work
+    work -> exit [label="Released"]
+    work -> exit [label="Empty", condition="preferred_label=\"Empty\""]
+    work -> exit [label="Failed", condition="outcome=failed"]
+}
