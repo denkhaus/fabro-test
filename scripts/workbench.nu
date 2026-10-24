@@ -400,6 +400,54 @@ def project-ensure []: nothing -> nothing {
     }
 }
 
+# Facet 10 (slack notification) needs a PLATFORM-side route: the engine has
+# ignored workflow-declared [run.notifications] by contract since 2026-09-06
+# (explicit exclusion, warn at admission), and the local stack settings never
+# carried one — the facet went red the moment a bench asserted the record
+# without provisioning the route (2026-10-24, bench 1024-224941). The server
+# folds settings [run.*] into every run spec (manifest run settings), so the
+# route rides the stack's settings.toml. Idempotent: a present block is a
+# no-op; a merge restarts the container once and waits for health.
+def route-ensure []: nothing -> nothing {
+    let container = 'fabro-lokal'
+    let settings = '/storage/.home/settings.toml'
+    let has = (do { ^docker exec $container grep -c 'run.notifications.terminal' $settings } | complete)
+    let count = ($has.stdout | str trim)
+    if $has.exit_code == 0 and ($count | is-not-empty) and ($count != '0') {
+        return
+    }
+    let block = '
+cat >> /storage/.home/settings.toml <<EOF
+
+[run.notifications.terminal]
+enabled = true
+provider = "slack"
+events = ["run.completed", "run.failed"]
+
+[run.notifications.terminal.slack]
+channel = "#dev-fabro"
+EOF'
+    let merge = (do { ^docker exec $container sh -c $block } | complete)
+    if $merge.exit_code != 0 {
+        print $"route-ensure: settings merge failed — facet 10 will go red: ($merge.stderr | str trim | str substring 0..120)"
+        return
+    }
+    let _ = (do { ^docker restart $container } | complete)
+    # poll health up to 60s; a bench against a half-started stack fails
+    # everywhere, so wait it out loudly
+    mut healthy = false
+    for _ in 1..30 {
+        let h = (try { http get $"(server)/health" } catch {|err| null })
+        if ($h | get -o status | default '') == 'ok' { $healthy = true; break }
+        sleep 2sec
+    }
+    if not $healthy {
+        print 'route-ensure: container did not return healthy after restart — the bench will surface it'
+    } else {
+        print '== workbench: route-ensure added the slack notification route (container restarted)'
+    }
+}
+
 def proof-ensure []: nothing -> nothing {
     project-ensure
     for n in [3 4] {
@@ -553,6 +601,8 @@ def main [] {
     print $"== workbench: bench=($bench_id)"
     # f1a9 world: the scratch automation create needs a registered project
     project-ensure
+    # facet 10's notification route must exist BEFORE any run completes
+    route-ensure
     print '== workbench: platform checks'
     let prows = (platform-checks)
     print ($prows | table --index false)
