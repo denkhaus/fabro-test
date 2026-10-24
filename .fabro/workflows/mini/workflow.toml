@@ -28,13 +28,9 @@ auto_merge = true
 merge_strategy = "squash"
 model = "zai:glm-4.7"
 
-# Terminal notifications to Slack (facet 10): the local server runs the
-# Slack socket-mode integration (#dev-fabro). The workbench asserts the
-# NotificationSent platform record.
-[run.notifications.terminal]
-enabled = true
-provider = "slack"
-events = ["run.completed", "run.failed"]
-
-[run.notifications.terminal.slack]
-channel = "#dev-fabro"
+# Terminal Slack notifications (facet 10) are a PLATFORM facility: the
+# engine ignores workflow-declared [run.notifications] by contract (warn
+# at admission). The route lives in the stack settings ([run.notifications]
+# in the server's settings.toml, folded into every run spec); the
+# workbench's route-ensure provisions it and asserts the notification.sent
+# platform record.
