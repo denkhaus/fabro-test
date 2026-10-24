@@ -6,6 +6,20 @@
 # Runplace-agnostic: the server comes from FABRO_SERVER (same convention
 # as run-mini.nu); unset defaults to the local dev stack.
 def server []: nothing -> string { $env.FABRO_SERVER? | default 'http://127.0.0.1:32276' }
+
+# Bench safety (fabro-6041 hygiene rule, 2026-10-24 incident): an exported
+# FABRO_SERVER pointing at production silently sent a probe run at
+# mirtuell. The bench fires runs and mutates the work registry — refuse
+# non-local servers unless FABRO_BENCH_ALLOW_REMOTE=1 is set in the same
+# breath as an explicit decision.
+def assert-local-server []: nothing -> nothing {
+    let s = (server)
+    let local = ($s | str starts-with 'http://127.0.0.1') or ($s | str starts-with 'http://localhost')
+    if (not $local) and ($env.FABRO_BENCH_ALLOW_REMOTE? | default '') != '1' {
+        print -e $"workbench: refusing non-local server '($s)' — the bench fires runs and writes the work registry. Set FABRO_BENCH_ALLOW_REMOTE=1 to force."
+        exit 2
+    }
+}
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
 # Probe registry: default expectation per workflow (probe-06/09 expect failure).
@@ -45,6 +59,14 @@ const PROBES = [
     # env, effective git config, ambient scratch-commit identity, and the
     # run branch's checkpoint identities, echoed into the run log.
     [probe-22-sandbox-env succeeded]
+    # Work-line probes (fabro-6041): the central tracker denkhaus/work,
+    # project fabro-proof, NO seeds anywhere in the path.
+    [probe-23-work-claim-release succeeded]
+    # probe-24 KNOWN-RED until the c98c fix: the error-flag render must
+    # ride the deployed zai->OpenAi request path (production fork.24
+    # evidence 2026-10-24: 4x unsupported_control on the live planner).
+    # Red blocks the next deploy window (fabro-6041 grill N3, user GO).
+    [probe-24-tool-error-wrap succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -204,6 +226,9 @@ def ensure-sync []: nothing -> nothing {
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
     ensure-sync
+    if $name starts-with 'probe-23' or $name starts-with 'probe-24' {
+        proof-ensure
+    }
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
     # expect rides as a LABEL: a failed run in the list must be recognizable
@@ -277,6 +302,30 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
             detail: ($detail + $" | hook notes=($notes | length) ran=($ran | length) failed=($failed | length)")
         }
     }
+    if $ok and $name == 'probe-23-work-claim-release' {
+        # Work-line roundtrip evidence (fabro-6041): the run stream must
+        # carry BOTH platform records — work.claimed (the atomic grant) and
+        # work.released (the escape hatch). Empty lane or a failed release
+        # (fabro-9166 class) is RED, never green-vacuous.
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
+        let claimed = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'work.claimed')} | length)
+        let released = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'work.released')} | length)
+        let roundtrip = ($claimed > 0) and ($released > 0)
+        return {facet: $name, ok: $roundtrip, detail: ($detail + $" | work.claimed=($claimed) work.released=($released)") }
+    }
+    if $ok and $name == 'probe-24-tool-error-wrap' {
+        # c98c seam (fabro-6041): the agent forced failing run-tool calls;
+        # every follow-up request must RENDER the error flag into content
+        # for openai-wire profiles — so the provider wire never drops it
+        # and the unsupported_control warning never fires. Red until the
+        # fix reaches the deployed request path (known-red, blocks the
+        # next deploy window per the FACETS rule).
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let errors = ($evs | where {|e| ((($e | get item | to json -r) | str contains 'invalid_arguments'))} | length)
+        let warns = ($evs | where {|e| ((($e | get item | to json -r) | str contains 'unsupported_control'))} | length)
+        let wire_ok = ($errors >= 2) and ($warns == 0)
+        return {facet: $name, ok: $wire_ok, detail: ($detail + $" | invalid_arguments=($errors) unsupported_control=($warns)") }
+    }
     {facet: $name, ok: $ok, detail: $detail}
 }
 
@@ -285,6 +334,45 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
 # then ensure the seed row is open with the exact same text — runs stay
 # comparable across benches and upstream merges (user directive).
 # ALL tracker mutations go through the seeds app, never manual JSON edits.
+# Work-line prestate (fabro-6041): the central tracker policy holds — ALL
+# items live on denkhaus/work, including proof items. Idempotent, no seeds:
+# (1) register project fabro-proof on the server (PUT upsert; targetRepo
+#     denkhaus/fabro-test is the manual-run resolution fallback),
+# (2) ensure the two marked proof items are open (host gh; reopen if a
+#     bench run left them closed),
+# (3) report live claims — a stuck claim from a crashed run shrinks the
+#     claimable pool; released by the 30-min orphan arm if the API path
+#     cannot (fabro-9166). Logged, never fatal: the pool has two items.
+def proof-ensure []: nothing -> nothing {
+    let body = {
+        displayName: 'Fabro Proof'
+        trackerProvider: 'github'
+        trackerRepo: 'denkhaus/work'
+        targetRepo: 'denkhaus/fabro-test'
+        projectLabel: 'project:fabro-proof'
+        laneLabels: {proof: 'lane:proof'}
+        claimLabelPrefix: 'fabro:run:'
+        claimCommentEnabled: false
+        backpressureOpenPrCap: 1
+    }
+    let put = (try { http put --headers (auth-header) $"(server)/api/v1/projects/fabro-proof" --content-type application/json ($body | to json -r) } catch {|err| null })
+    if $put == null {
+        print 'proof-ensure: project upsert failed (bench continues; the work probes will name it)'
+    }
+    for n in [3 4] {
+        let st = (do { ^gh issue view $n --repo denkhaus/work --json state --jq state } | complete | get stdout | str trim)
+        if $st == 'CLOSED' {
+            let re = (do { ^gh issue reopen $n --repo denkhaus/work } | complete)
+            if $re.exit_code == 0 { print $"proof-ensure: reopened denkhaus/work#($n)" }
+        }
+    }
+    let claims = (try { http get --headers (auth-header) $"(server)/api/v1/projects/fabro-proof/claims" } catch {|err| {data: []} })
+    let live = ($claims | get -o data | default [] | length)
+    if $live > 0 {
+        print $"proof-ensure: ($live) live claim(s) on fabro-proof (orphan arm heals in <=30m if stuck)"
+    }
+}
+
 def seed-ensure []: nothing -> nothing {
     # (0) deterministic base: whatever a half-failed prior dance left behind
     #     (unpushed commit, stale bench branch), start from origin/main.
@@ -400,6 +488,7 @@ def seed-ensure []: nothing -> nothing {
 # Known-red regressions (seed filed): probe-03-tools (fabro-1a41),
 # probe-06-guards (fabro-51ad) — a red exit there is the expected finding.
 def "main probe" [name: string, --expect: string]: nothing -> nothing {
+    assert-local-server
     let known = ($PROBES | where name == $name)
     let exp = if $expect != null { $expect } else if ($known | is-empty) { 'succeeded' } else { $known | first | get expect }
     let bench_id = ('single-' + (date now | format date '%m%d-%H%M%S'))
@@ -415,6 +504,7 @@ def "main probe" [name: string, --expect: string]: nothing -> nothing {
 }
 
 def main [] {
+    assert-local-server
     clean-runs
     let bench_id = (date now | format date '%m%d-%H%M%S')
     print $"== workbench: bench=($bench_id)"

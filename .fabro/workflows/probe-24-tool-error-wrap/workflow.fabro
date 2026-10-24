@@ -1,0 +1,27 @@
+digraph Probe24ToolErrorWrap {
+    graph [
+        goal="Force two failing run-tool calls; the wire must render the error flag instead of dropping it",
+        default_max_retries=0,
+        max_node_visits=6,
+        stall_timeout="5m",
+        rankdir=LR
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    probe [
+        label="Probe: two invalid tool calls",
+        prompt="@prompts/probe.md",
+        output_schema="@schemas/probe-output.schema.json",
+        output_retries=2,
+        max_visits=4,
+        retry_policy="standard",
+        x.fabro_tools="fabro_run_search",
+        x.tools="read_file"
+    ]
+
+    start -> probe
+    probe -> exit [label="Done"]
+    probe -> exit [label="Failed", condition="outcome=failed"]
+}
