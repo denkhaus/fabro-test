@@ -21,9 +21,10 @@ def main [subject: string]: nothing -> nothing {
     if $sw.exit_code != 0 { fail $"land: branch: ($sw.stderr | str trim | str substring 0..200)" }
     # .fabro/workflows rides along: probe rigs are bench assets landing
     # through the same dance (fabro-70af probes 17-19, 2026-10-02).
-    # Bench docs (FACETS.md, README.md) land the same way: the catalog row
-    # and the probe that proves it are one change.
-    let add = (do { git add scripts/ justfile .fabro/workflows FACETS.md README.md } | complete)
+    # Bench docs (FACETS.md, README.md, AGENTS.md) land the same way: the
+    # catalog row and the probe that proves it are one change, and the
+    # written-language rule (ADR-0033) is visible where the work happens.
+    let add = (do { git add scripts/ justfile .fabro/workflows FACETS.md README.md AGENTS.md } | complete)
     if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
     let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
     if ($dirty | is-empty) {
