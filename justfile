@@ -33,6 +33,6 @@ probes:
     @nu -c 'ls .fabro/workflows | get name | to text'
 
 # THE workbench: after every upstream merge. All probes + platform checks
-# + mini integration with publish. Rot/Gruen-Tabelle; rot -> exit 1.
+# + mini integration with publish. Red/green table; red -> exit 1.
 workbench:
     nu scripts/workbench.nu
