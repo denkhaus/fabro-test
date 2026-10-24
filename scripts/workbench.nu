@@ -62,10 +62,10 @@ const PROBES = [
     # Work-line probes (fabro-6041): the central tracker denkhaus/work,
     # project fabro-proof, NO seeds anywhere in the path.
     [probe-23-work-claim-release succeeded]
-    # probe-24 KNOWN-RED until the c98c fix: the error-flag render must
-    # ride the deployed zai->OpenAi request path (production fork.24
-    # evidence 2026-10-24: 4x unsupported_control on the live planner).
-    # Red blocks the next deploy window (fabro-6041 grill N3, user GO).
+    # probe-24: the c98c regression net. GREEN since 2026-10-24 (pebble
+    # 47a036fd — the marker replaces the flag; probe run 01M5Q5TMJ8:
+    # two is_error tool results, zero unsupported_control warnings, the
+    # agent quoted the [TOOL ERROR] markers).
     [probe-24-tool-error-wrap succeeded]
 ]
 
@@ -223,6 +223,17 @@ def ensure-sync []: nothing -> nothing {
     }
 }
 
+# The innermost pebble stream event of a run-stream row: the record at
+# item.record.body.ev.custom.event.event, carrying ONE variant key
+# (UserInput, Warning, ToolCallCompleted, ...). Rows of other custom
+# kinds carry a STRING there — callers MUST guard with
+# `describe | str starts-with "record"` before variant access. A string
+# cell-path argument (`get -o "a.b.c") does NOT split on dots — it looks
+# up one literal column name — so the path stays bare here.
+def pebble-event [e: record]: nothing -> any {
+    $e | get -o item.record.body.ev.custom.event.event
+}
+
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
     ensure-sync
@@ -314,17 +325,27 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: $roundtrip, detail: ($detail + $" | work.claimed=($claimed) work.released=($released)") }
     }
     if $ok and $name == 'probe-24-tool-error-wrap' {
-        # c98c seam (fabro-6041): the agent forced failing run-tool calls;
-        # every follow-up request must RENDER the error flag into content
-        # for openai-wire profiles — so the provider wire never drops it
-        # and the unsupported_control warning never fires. Red until the
-        # fix reaches the deployed request path (known-red, blocks the
-        # next deploy window per the FACETS rule).
+        # c98c seam (fabro-6041): the agent forced two failing run-tool
+        # calls; every follow-up request must RENDER the error flag into
+        # content for openai-wire profiles — so the provider wire never
+        # drops it and the unsupported_control warning never fires.
+        # Count the REAL pebble events, never raw string matches: the
+        # probe prompt itself names 'unsupported_control', so a
+        # contains-grep counts the UserInput echo (the first bench round
+        # read green runs as red through exactly that artifact). The fix
+        # landed 2026-10-24 (pebble 47a036fd: the marker replaces the
+        # flag); this row is the regression net for the deployed path.
         let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
-        let errors = ($evs | where {|e| ((($e | get item | to json -r) | str contains 'invalid_arguments'))} | length)
-        let warns = ($evs | where {|e| ((($e | get item | to json -r) | str contains 'unsupported_control'))} | length)
+        let errors = ($evs | where {|e|
+            let pe = (pebble-event $e)
+            (($pe | describe | str starts-with 'record') and ($pe.ToolCallCompleted?.is_error? | default false))
+        } | length)
+        let warns = ($evs | where {|e|
+            let pe = (pebble-event $e)
+            (($pe | describe | str starts-with 'record') and (($pe.Warning?.kind? | default '') == 'unsupported_control'))
+        } | length)
         let wire_ok = ($errors >= 2) and ($warns == 0)
-        return {facet: $name, ok: $wire_ok, detail: ($detail + $" | invalid_arguments=($errors) unsupported_control=($warns)") }
+        return {facet: $name, ok: $wire_ok, detail: ($detail + $" | tool_errors=($errors) unsupported_control=($warns)") }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }

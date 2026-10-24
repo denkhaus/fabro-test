@@ -32,7 +32,7 @@ artifacts are in English (user directive 2026-10-24: no language jumble).
 | 12 | The conditional success edge beats the unconditional soft-exit edge (tiering) | probe-12-tier-shape | run succeeded (not SoftStop) | bench=single-0926-135441 |
 | 03 | x.tools allowlist (fabro-1a41 landed 2026-09-26: ToolPolicyHooks, engine-layer denial) | probe-03-tools | write_file denied, run succeeded | bench=single-0926-112254 |
 | 23 | Work-item line entirely without seeds: fabro_work_next grant + fabro_work_release against project fabro-proof on the CENTRAL tracker denkhaus/work (fabro-6041) | probe-23-work-claim-release | run succeeded AND work.claimed + work.released in the run events | new (proof items denkhaus/work#3/#4, canonical proof-ensure) |
-| 24 | Tool-result error-flag rendering on the deployed profile path zai->OpenAi (c98c; fabro-6041 N3) | probe-24-tool-error-wrap | >= 2 forced invalid_arguments AND 0 unsupported_control warnings in the events | RED until the real fix (production evidence fork.24 2026-10-24: 4x warning on the live planner) — blocks fork.25 |
+| 24 | Tool-result error-flag rendering on the deployed profile path zai->OpenAi (c98c; fabro-6041 N3) | probe-24-tool-error-wrap | >= 2 is_error ToolCallCompleted events AND 0 unsupported_control Warning events | GREEN 2026-10-24 (pebble 47a036fd, probe run 01M5Q5TMJ8: marker replaces the flag, agent quoted [TOOL ERROR]) |
 
 Maintenance: new product bugs (rootprint error patterns from mirtuell) land
 as a row here + probe + fabro seed, BEFORE any deploy runs.
