@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 # THE workbench: pre-clean the board, then all probes + platform checks
 # + mini integration with publish. Every run carries label bench=<id>.
-# Rot/Gruen-Tabelle pro Facette; rot -> exit 1.
+# Red/green table per facet; red -> exit 1.
 
 # Runplace-agnostic: the server comes from FABRO_SERVER (same convention
 # as run-mini.nu); unset defaults to the local dev stack.
