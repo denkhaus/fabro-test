@@ -67,6 +67,11 @@ const PROBES = [
     # two is_error tool results, zero unsupported_control warnings, the
     # agent quoted the [TOOL ERROR] markers).
     [probe-24-tool-error-wrap succeeded]
+    # probe-25: the work-item lifecycle roundtrip (fabro-6041 user
+    # direction 2026-10-25) — create -> show -> update -> close, the
+    # closeout agent's exact tool set (fabro-9986's first productive
+    # dependency, deterministically green before any lap relies on it).
+    [probe-25-work-roundtrip succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -359,6 +364,31 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         } | length)
         let wire_ok = ($errors >= 2) and ($warns == 0)
         return {facet: $name, ok: $wire_ok, detail: ($detail + $" | tool_errors=($errors) unsupported_control=($warns)") }
+    }
+    if $ok and $name == 'probe-25-work-roundtrip' {
+        # Work-item lifecycle roundtrip (fabro-6041, user direction
+        # 2026-10-25): four successful tool calls (create, show, update,
+        # close — counted on REAL pebble ToolCallCompleted events, never
+        # string greps across the whole stream), and the roundtrip's item
+        # CLOSED on the tracker with both body markers. The item is found
+        # by its exact fixed title (newest closed match = this bench's
+        # item); stream-output parsing is deliberately avoided — the
+        # routing JSON rides petri execution records whose shape is not a
+        # stable bench contract. This is the closeout agent's tool set —
+        # fabro-9986's laps rely on it.
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let calls = ($evs | where {|e|
+            let pe = (pebble-event $e)
+            (($pe | describe | str starts-with 'record') and ($pe.ToolCallCompleted? != null)
+                and (not ($pe.ToolCallCompleted?.is_error? | default false)))
+        })
+        let tools_ok = (['fabro_work_create' 'fabro_work_show' 'fabro_work_update' 'fabro_work_close'] | all {|t|
+            ($calls | where {|e| (((pebble-event $e) | get -o ToolCallCompleted | to json -r) | str contains $t)} | length) > 0
+        })
+        let newest = (do { ^gh issue list --repo denkhaus/work --state closed --search '"probe-25 roundtrip item" in:title' --json number,body --jq 'sort_by(.number) | last | (.number | tostring) + " " + .body' } | complete | get stdout | str trim)
+        let state_ok = ($newest | str contains 'marker-create') and ($newest | str contains 'marker-update')
+        let roundtrip = $tools_ok and $state_ok
+        return {facet: $name, ok: $roundtrip, detail: ($detail + $" | lifecycle_calls=($calls | length) item#=($newest | split row ' ' | first) closed=($state_ok)") }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }
