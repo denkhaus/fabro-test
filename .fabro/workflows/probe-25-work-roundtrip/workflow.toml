@@ -1,0 +1,24 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# probe-25 (fabro-6041, user direction 2026-10-25): the work-item
+# LIFECYCLE roundtrip — create -> show -> update -> close, the fabro-9986
+# closeout agent's exact tool set, deterministically green before any
+# migrated loop lap relies on it. The agent files its own item (fixed
+# title 'probe-25 roundtrip item', body markers marker-create and
+# marker-update), verifies it through show, and closes it; the bench
+# asserts four successful ToolCallCompleted events (one per tool) and the
+# newest closed item of that title on the CENTRAL tracker denkhaus/work.
+[run.agent]
+fabro_tools = true
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
