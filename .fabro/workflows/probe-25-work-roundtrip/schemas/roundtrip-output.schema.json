@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "probe-25 work roundtrip routing output",
+  "description": "Routing contract for the work-item lifecycle probe: the agent reports whether create -> show -> update -> close all succeeded through the run tools. context_updates carry the created item key for the bench's state verification.",
+  "type": "object",
+  "required": [
+    "outcome",
+    "preferred_next_label"
+  ],
+  "properties": {
+    "outcome": {
+      "type": "string"
+    },
+    "preferred_next_label": {
+      "type": "string",
+      "enum": [
+        "Closed",
+        "Failed"
+      ]
+    },
+    "failure_reason": {
+      "type": "string"
+    },
+    "context_updates": {
+      "type": "object",
+      "properties": {
+        "created_key": {
+          "type": "string"
+        },
+        "journal": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
