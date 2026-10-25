@@ -222,6 +222,112 @@ def platform-checks []: nothing -> list<record> {
         ok:     ($scratch == 'skip')
         detail: ($"on_overlap after a bare replace: ($scratch)")
     })
+
+    # The cutover's CLI facade (fabro-cc1b): the host scripts leave `.seeds`
+    # only after these verbs prove themselves on the bench's own items.
+    $rows = ($rows | append (work-cli-checks))
+    $rows
+}
+
+# The CLI facade over work items (cutover stage 1b, fabro-cc1b). This is the
+# first half of the full-chain probe the stage-6 retirement of the seeds
+# binary needs: the host scripts (friction-score, salvage-sweep, push-gate,
+# close-claim-check) stop reading `.seeds` and start calling these verbs, so
+# the verbs run here against the bench's own server first.
+#
+# The items are the bench's own (`cli-test` label, project fabro-proof), are
+# created in this run and closed in this run, so the loop's queue never sees
+# them. Bodies travel through stdin on purpose: a real item body must never
+# be spelled onto a shell command line.
+def work-cli-checks []: nothing -> list<record> {
+    mut rows = []
+    # A facet that exercises a NEW verb resolves FABRO_BIN first (run-mini
+    # precedent): the bench's installed binary lags the tree, so a stale
+    # binary reports itself instead of blaming the server.
+    let fabro = ($env.FABRO_BIN? | default ('~/.fabro/bin/fabro' | path expand))
+    let project = 'fabro-proof'
+    let tag = (date now | format date '%m%d-%H%M%S')
+    let title = $"work-cli probe ($tag)"
+    let body = $"work-cli probe body ($tag)\nsecond line of the same body"
+    let reason = 'work-cli probe: closed by the bench in the same run'
+
+    let created = ($body | ^$fabro work --server (server) create --project $project --title $title --body-file - --label cli-test --label $"bench=($tag)" --json | complete)
+    let key = (if $created.exit_code == 0 {
+        $created.stdout | from json | get -o itemKey | default ''
+    } else {
+        ''
+    })
+    # Without an item no later verb can say anything true, so every row
+    # carries the create failure instead of a second, derived complaint.
+    let why = (if ($key | is-empty) {
+        $"create failed: exit ($created.exit_code) — ($created.stderr | str trim | str substring 0..200)"
+    } else {
+        ''
+    })
+    print $"== workbench: work CLI probe ($key)"
+
+    # Read path first, while the item is still open: `work list` must contain
+    # what `work create` filed. GitHub's label-filtered list converges a few
+    # seconds after a write (the label index, not our server — measured on
+    # denkhaus/work#10..#12), so poll briefly: the row asserts the durable
+    # property, not the index's mood.
+    mut list_ok = false
+    mut list_detail = $why
+    if ($why | is-empty) {
+        mut attempts = 0
+        loop {
+            $attempts = ($attempts + 1)
+            let listed = (do { ^$fabro work --server (server) list --project $project --json } | complete)
+            let items = (try { $listed.stdout | from json } catch { [] })
+            if ($listed.exit_code == 0) and (($items | where itemKey == $key | length) > 0) {
+                $list_ok = true
+                $list_detail = $"($key) in the open list after ($attempts) reads"
+                break
+            }
+            if $attempts >= 6 {
+                $list_detail = $"list exit ($listed.exit_code): ($listed.stderr | str trim | str substring 0..160)"
+                break
+            }
+            sleep 2sec
+        }
+    }
+    $rows = ($rows | append {facet: 'P4 work CLI list', ok: $list_ok, detail: $list_detail})
+
+    # The selector path: a BARE NUMBER has to compose against the project's
+    # tracker repo, which no unit test can prove end to end. `show` prints the
+    # head table and the body verbatim, so the tag must survive both — and it
+    # only ever travelled as stdin.
+    mut roundtrip_ok = false
+    mut roundtrip_detail = $why
+    if ($why | is-empty) {
+        let number = ($key | split row '#' | last)
+        let shown = (do { ^$fabro work --server (server) show --project $project $number } | complete)
+        let body_seen = ($shown.exit_code == 0) and ($shown.stdout | str contains $tag)
+        let closed = (do { ^$fabro work --server (server) close --project $project $key --reason $reason } | complete)
+        let close_ok = ($closed.exit_code == 0) and ($closed.stderr | str contains 'Closed')
+        $roundtrip_ok = $body_seen and $close_ok
+        $roundtrip_detail = $"($key): show-by-number=($shown.exit_code) body=($body_seen) close=($closed.exit_code)"
+    }
+    $rows = ($rows | append {
+        facet:  'P4 work CLI create -> show -> close roundtrip'
+        ok:     $roundtrip_ok
+        detail: $roundtrip_detail
+    })
+
+    # A live queue is normal mid-loop (the loop lane holds claims), so the row
+    # asserts the verb, not an empty ledger: either the claims table or the
+    # explicit empty message.
+    let claims = (do { ^$fabro work --server (server) claims --project $project } | complete)
+    let claims_ok = ($claims.exit_code == 0) and ((($claims.stdout | str contains 'CLAIM') or ($claims.stderr | str contains 'No live claims')))
+    mut claims_detail = ($claims.stderr | str trim | str substring 0..160)
+    if $claims_ok {
+        if ($claims.stderr | str contains 'No live claims') {
+            $claims_detail = 'empty ledger'
+        } else {
+            $claims_detail = $"live claims read: ($claims.stdout | lines | skip 1 | length)"
+        }
+    }
+    $rows = ($rows | append {facet: 'P4 work CLI claims', ok: $claims_ok, detail: $claims_detail})
     $rows
 }
 

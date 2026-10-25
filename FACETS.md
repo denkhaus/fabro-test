@@ -34,9 +34,19 @@ artifacts are in English (user directive 2026-10-24: no language jumble).
 | 23 | Work-item line entirely without seeds: fabro_work_next grant + fabro_work_release against project fabro-proof on the CENTRAL tracker denkhaus/work (fabro-6041) | probe-23-work-claim-release | run succeeded AND work.claimed + work.released in the run events | new (proof items denkhaus/work#3/#4, canonical proof-ensure) |
 | 24 | Tool-result error-flag rendering on the deployed profile path zai->OpenAi (c98c; fabro-6041 N3) | probe-24-tool-error-wrap | >= 2 is_error ToolCallCompleted events AND 0 unsupported_control Warning events | GREEN 2026-10-24 (pebble 47a036fd, probe run 01M5Q5TMJ8: marker replaces the flag, agent quoted [TOOL ERROR]) |
 | 25 | Work-item lifecycle roundtrip: create -> show -> update -> close through the run tools (fabro-6041 user direction 2026-10-25; the fabro-9986 closeout agent's tool set) | probe-25-work-roundtrip | 4 successful ToolCallCompleted events (one per tool) AND the newest closed item titled 'probe-25 roundtrip item' on denkhaus/work carries marker-create + marker-update | new |
+| P4 | CLI facade over work items: `fabro work list/show/create/close/claims` on the bench's own `cli-test` items (cutover stage 1b, fabro-cc1b; the host scripts leave `.seeds` behind) | work-cli-checks (nu) | 3 rows green: the created item appears in the open list, `show` by BARE NUMBER prints the body that only travelled through stdin, `close` reports it, `claims` reads the queue | first green 2026-10-25 (denkhaus/work#15) |
 
 Maintenance: new product bugs (rootprint error patterns from mirtuell) land
 as a row here + probe + fabro seed, BEFORE any deploy runs.
+
+Bench note (P4 work CLI): the row exercises the `fabro` BINARY, not the
+server, so it needs a binary that carries the `work` verb. It resolves
+`FABRO_BIN` first and falls back to `~/.fabro/bin/fabro` (run-mini
+precedent) — a stale install reports itself in the row detail instead of
+blaming the server. GitHub's label-filtered list converges a few seconds
+after a write (measured on denkhaus/work#10..#12: create, then the list
+missed the item for ~2s), so the row polls up to 6 times at 2s instead of
+asserting the index's mood.
 
 Bench mandate (user principle 2026-10-24, fabro-6041): the bench is a
 living regression net, not an archive. Tests are not set in stone: when an
