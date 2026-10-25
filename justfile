@@ -13,7 +13,7 @@ publish rid:
 
 # Land dirty workbench script changes on protected main (PR dance, one command).
 land subject:
-    nu scripts/land.nu {{subject}}
+    nu scripts/land.nu {{quote(subject)}}
 
 # Validate every workflow graph (full admission incl. @-file refs).
 validate target="":
