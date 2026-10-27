@@ -3,14 +3,18 @@ _version = 1
 [workflow]
 graph = "workflow.fabro"
 
-# probe-25 (fabro-6041, user direction 2026-10-25): the work-item
-# LIFECYCLE roundtrip — create -> show -> update -> close, the fabro-9986
-# closeout agent's exact tool set, deterministically green before any
-# migrated loop lap relies on it. The agent files its own item (fixed
-# title 'probe-25 roundtrip item', body markers marker-create and
-# marker-update), verifies it through show, and closes it; the bench
-# asserts four successful ToolCallCompleted events (one per tool) and the
-# newest closed item of that title on the CENTRAL tracker denkhaus/work.
+# probe-25 (fabro-6041, user direction 2026-10-25; rescued 2026-10-27 for
+# the claim-binding core denkhaus/work#991): the work-item LIFECYCLE
+# roundtrip on a CLAIMED item — next -> show -> update -> close, the
+# fabro-9986 closeout agent's order of operations. #991 made update and
+# close claim-bound ("may only close or edit items it holds a claim
+# on"), so the pre-#991 create-first contract went red by design; the
+# bench now ensures a p1 `probe-25 roundtrip item` (body carries
+# marker-create) in project fabro-proof / lane proof before the run,
+# the agent claims it via fabro_work_next, verifies it through show,
+# appends marker-update, and closes it; the bench asserts four
+# successful ToolCallCompleted events (one per tool) and the newest
+# closed item of that title on the CENTRAL tracker denkhaus/work.
 [run.agent]
 fabro_tools = true
 
