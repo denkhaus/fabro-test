@@ -1,6 +1,6 @@
 digraph Probe25WorkRoundtrip {
     graph [
-        goal="Exercise the work-item lifecycle through the run tools: create, show, update, close",
+        goal="Exercise the work-item lifecycle through the run tools on a claimed item: next, show, update, close",
         default_max_retries=0,
         max_node_visits=6,
         stall_timeout="5m",
@@ -11,13 +11,13 @@ digraph Probe25WorkRoundtrip {
     exit  [shape=Msquare, label="Exit"]
 
     roundtrip [
-        label="Work: create -> show -> update -> close",
+        label="Work: next -> show -> update -> close",
         prompt="@prompts/roundtrip.md",
         output_schema="@schemas/roundtrip-output.schema.json",
         output_retries=2,
         max_visits=4,
         retry_policy="standard",
-        x.fabro_tools="fabro_work_create,fabro_work_show,fabro_work_update,fabro_work_close",
+        x.fabro_tools="fabro_work_next,fabro_work_show,fabro_work_update,fabro_work_close",
         x.tools="read_file"
     ]
 

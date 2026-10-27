@@ -364,6 +364,9 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     if $name starts-with 'probe-23' or $name starts-with 'probe-24' {
         proof-ensure
     }
+    if $name starts-with 'probe-25' {
+        probe25-target-ensure
+    }
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
     # expect rides as a LABEL: a failed run in the list must be recognizable
@@ -472,23 +475,25 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: $wire_ok, detail: ($detail + $" | tool_errors=($errors) unsupported_control=($warns)") }
     }
     if $ok and $name == 'probe-25-work-roundtrip' {
-        # Work-item lifecycle roundtrip (fabro-6041, user direction
-        # 2026-10-25): four successful tool calls (create, show, update,
-        # close — counted on REAL pebble ToolCallCompleted events, never
-        # string greps across the whole stream), and the roundtrip's item
-        # CLOSED on the tracker with both body markers. The item is found
-        # by its exact fixed title (newest closed match = this bench's
-        # item); stream-output parsing is deliberately avoided — the
-        # routing JSON rides petri execution records whose shape is not a
-        # stable bench contract. This is the closeout agent's tool set —
-        # fabro-9986's laps rely on it.
+        # Work-item lifecycle roundtrip on a CLAIMED item (fabro-6041,
+        # user direction 2026-10-25; rescued 2026-10-27 for the
+        # claim-binding core denkhaus/work#991: update/close refuse
+        # without a live claim held by the run, so the pre-#991
+        # create-first contract went red BY DESIGN). The bench ensured a
+        # p1 target item before the run; the agent claims it via
+        # fabro_work_next, then show, update, close. Counted on REAL
+        # pebble ToolCallCompleted events, never string greps across the
+        # whole stream; the item is found by its exact fixed title
+        # (newest closed match = this bench's item). This is the
+        # closeout agent's order of operations — fabro-9986's laps rely
+        # on it.
         let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
         let calls = ($evs | where {|e|
             let pe = (pebble-event $e)
             (($pe | describe | str starts-with 'record') and ($pe.ToolCallCompleted? != null)
                 and (not ($pe.ToolCallCompleted?.is_error? | default false)))
         })
-        let tools_ok = (['fabro_work_create' 'fabro_work_show' 'fabro_work_update' 'fabro_work_close'] | all {|t|
+        let tools_ok = (['fabro_work_next' 'fabro_work_show' 'fabro_work_update' 'fabro_work_close'] | all {|t|
             ($calls | where {|e| (((pebble-event $e) | get -o ToolCallCompleted | to json -r) | str contains $t)} | length) > 0
         })
         let newest = (do { ^gh issue list --repo denkhaus/work --state closed --search '"probe-25 roundtrip item" in:title' --json number,body --jq 'sort_by(.number) | last | (.number | tostring) + " " + .body' } | complete | get stdout | str trim)
@@ -598,6 +603,26 @@ def proof-ensure []: nothing -> nothing {
     if $live > 0 {
         print $"proof-ensure: ($live) live claims on fabro-proof — orphan arm heals in 30m or less if stuck"
     }
+}
+
+# probe-25's claim target (rescue 2026-10-27, denkhaus/work#991): the
+# lifecycle agent works on a CLAIMED item, and a claim only comes through
+# fabro_work_next — which grants the highest-priority FREE item of the
+# lane. Ensuring a fresh p1 item of the exact fixed title (body carries
+# marker-create) right before the run makes the grant deterministic:
+# it is the only free prio:p1 item in project fabro-proof / lane proof.
+# A new item per run keeps the assertion simple (newest closed match);
+# facet 23 runs EARLIER and releases whatever it claimed, so the grant
+# does not race the sibling probe.
+def probe25-target-ensure []: nothing -> nothing {
+    project-ensure
+    let created = (do {
+        ^gh issue create --repo denkhaus/work --title 'probe-25 roundtrip item' --body 'Roundtrip body: created by the bench probe. marker-create' --label 'project:fabro-proof' --label 'lane:proof' --label 'prio:p1'
+    } | complete)
+    if $created.exit_code != 0 {
+        fail $"probe25-target-ensure: gh issue create failed: ($created.stderr | str trim | str substring 0..200)"
+    }
+    print $"probe25-target-ensure: filed ($created.stdout | str trim) — p1 claim target"
 }
 
 def seed-ensure []: nothing -> nothing {
