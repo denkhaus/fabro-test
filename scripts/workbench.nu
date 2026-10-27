@@ -816,17 +816,19 @@ def main [] {
     # do not fail the bench exit until their seeds land.
     #   P1 automation replace keeps on_overlap -> fabro-2093 (web PUT drops it)
     #   probe-15-skills-two-tokens            -> fabro-3fce (skill expansion kills sessions)
-    #   09 publish bridge                     -> fabro-4c11 remainder (zai answers
-    #     the JSON PR-content request with prose: 'the model did not return a
-    #     JSON document' — the bridge assertion pins it, bench 0928-205934)
-    let known_red: list<string> = ['P1 automation replace keeps on_overlap' 'probe-15-skills-two-tokens' '09 publish bridge']
+    # The publish bridge left this list 2026-10-27: fabro-4c11's fix is live
+    # (bench 1027-162117: engine PR #87 body is generated prose, not the
+    # skeleton) and its last red was the create-then-read index race the
+    # bridge now polls through (publish-bridge.nu). The body assertion is
+    # re-armed: a skeleton bridge fails the bench again.
+    let known_red: list<string> = ['P1 automation replace keeps on_overlap' 'probe-15-skills-two-tokens']
     let fresh = ($red | where {|r| ($r.facet not-in $known_red)} | length)
     if ($fresh > 0) {
         print -e $"WORKBENCH RED: ($fresh) NEW facet failures"
         exit 1
     }
     if ($red | is-not-empty) {
-        print -e $"WORKBENCH YELLOW: ($red | length) known-red facets — tracked seeds: fabro-2093 on_overlap, fabro-3fce probe-15, fabro-4c11 publish body"
+        print -e $"WORKBENCH YELLOW: ($red | length) known-red facets — tracked seeds: fabro-2093 on_overlap, fabro-3fce probe-15"
     }
     print 'WORKBENCH done — no new failures'
 }

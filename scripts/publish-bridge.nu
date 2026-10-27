@@ -69,8 +69,20 @@ def main [run_id: string] {
         # The deterministic skeleton notice (EMPTY_BODY_NOTICE in
         # fabro-workflow/src/pull_request.rs) or an empty body means the
         # configured PR model still never reaches the client in route form.
-        let body = (do { ^gh pr view $url -R $REPO --json body -q .body } | complete)
-        if $body.exit_code != 0 { fail $"engine PR body fetch failed: ($body.stderr | str trim | str substring 0..200)" }
+        # GitHub's read path converges a few seconds after a write (the
+        # same index lag the P4 work-CLI row polls through, measured on
+        # denkhaus/work#10..#12): the immediate fetch right after create
+        # raced that convergence in bench 1027-162117 and failed the
+        # bridge although the body was generated prose (PR #87). Poll
+        # briefly — this asserts the durable body, not the index's mood.
+        mut body = (do { ^gh pr view $url -R $REPO --json body -q .body } | complete)
+        mut fetch_attempts = 1
+        while ((($body.exit_code != 0) or (($body.stdout | str trim | is-empty))) and ($fetch_attempts < 6)) {
+            sleep 2sec
+            $body = (do { ^gh pr view $url -R $REPO --json body -q .body } | complete)
+            $fetch_attempts = ($fetch_attempts + 1)
+        }
+        if $body.exit_code != 0 { fail $"engine PR body fetch failed after ($fetch_attempts) reads: ($body.stderr | str trim | str substring 0..200)" }
         let b = ($body.stdout | str trim)
         if ($b | is-empty) { fail 'engine PR body is empty — PR-content generation produced nothing (fabro-4c11 class)' }
         if ($b | str contains 'The LLM did not produce a description') {
