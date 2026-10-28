@@ -1,4 +1,5 @@
 # Canonical workbench task — reset to this stub before every bench.
 def main []: nothing -> nothing {
-    print 'canonical-ok-9001'
+    # Stub: the bench seed replaces this with the required return value.
+    error make {msg: "bench prestate stub"}
 }
