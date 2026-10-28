@@ -1,0 +1,31 @@
+digraph Probe26GateBounceCatchall {
+    graph [goal="The pre-fix control: a catch-all bounce downgrades the completed run", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    tester [
+        label="Tester: gate red until delivered",
+        shape=parallelogram,
+        script="test -f .probe26-delivered",
+        timeout="30s",
+        max_retries=0
+    ]
+    implementer [
+        label="Implementer: deliver the marker",
+        shape=parallelogram,
+        script="touch .probe26-delivered",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> tester
+    # The PRE-FIX develop/loop shape (work#1029, run 01M5ZEWKAMMZ): the
+    # bounce is the unconditional fallback, the deadlock exit carries the
+    # generation guard. The engine completes this run the same way — but
+    # the b00c fold downgrades the green conclusion to
+    # failed/workflow_error and the publish path never runs. This probe
+    # pins BOTH sides of that split so the bench catches any future
+    # regression in either direction.
+    tester -> implementer [label="Gate red"]
+    tester -> exit [label="Gate green", condition="outcome=succeeded"]
+    tester -> exit [x.kind="deadlock", label="Gate deadlock (3 reds, needs a human)", condition="nodes.tester.generation >= 3"]
+    implementer -> exit [label="Delivered"]
+}
