@@ -80,6 +80,15 @@ const PROBES = [
     # regression reddens the bench.
     [probe-26-gate-bounce succeeded]
     [probe-26-gate-bounce-catchall failed]
+    # probe-27/28 (user testing-philosophy directive 2026-10-28: targeted
+    # single-aspect probes that compose — real lane graphs deliberately
+    # NOT bench material): 27 pins the ADR-0019 property the fail-open
+    # arms compose on (gh absent in the toolchain sandbox); 28 pins the
+    # closeout work-create argv grammar against the TOOLCHAIN's fabro
+    # CLI (the fabro-repo smoke only sees the host CLI — run
+    # 01M60NX9W7N6 lost a filing to a clap reject here).
+    [probe-27-gh-absent succeeded]
+    [probe-28-work-create-argv succeeded]
 ]
 
 def auth-header []: nothing -> record {

@@ -1,0 +1,14 @@
+digraph Probe28WorkCreateArgv {
+    graph [goal="The closeout work-create argv parses against the toolchain CLI", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    check [
+        label="Check: argv grammar, not transport",
+        shape=parallelogram,
+        script="out=$(printf '' | fabro work --server http://127.0.0.1:1 create --project fabro --title pin --body-file - --type task --label pin 2>&1); case \"$out\" in *'unexpected argument'*) echo \"CLAP REJECTS THE CLOSEOUT ARGV: $out\"; exit 1;; esac; echo \"argv parses (transport refused as expected): $(echo \"$out\" | head -1)\"; exit 0",
+        timeout="60s",
+        max_retries=0
+    ]
+    start -> check
+    check -> exit [label="Argv parses"]
+}
