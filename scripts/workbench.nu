@@ -442,19 +442,33 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
         let terminal = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'run.lifecycle')} | last)
         let transition = ($terminal | get -o item.record.transition | default '?')
-        let branch = $"fabro/run/($run_id)"
-        let prs = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number --limit 1 } | complete)
-        let pr_count = (try { $prs.stdout | from json | length } catch { 0 })
+        # The local stack has no engine publish step yet (fabro-ac40):
+        # the bench bridges it manually (publish-bridge.nu, docker cp the
+        # snapshot + push + PR) — driven for the fixed shape ONLY, exactly
+        # as the mini facet drives it; the catch-all twin must stay
+        # UNPUBLISHED (nothing bridges it and nothing auto-publishes: its
+        # downgraded record refuses the publish path — the #1029 symptom:
+        # the branch was never pushed, the work had to be salvaged by
+        # hand). The assert sits on the BRANCH PUSH (the deterministic,
+        # exact-#1029 signal); the PR leg is the bridge's own
+        # known-flaky surface (server-PR title generation, the mini
+        # facet owns it).
         if $name == 'probe-26-gate-bounce' {
+            let bridge = (do { nu scripts/publish-bridge.nu $run_id } | complete)
+            let pushed = (do { git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
+            let branch_sha = ($pushed.stdout | str trim)
             let agree = ($transition == 'succeeded')
-            let published = ($pr_count > 0)
+            let published = ($branch_sha | is-not-empty)
             let ok26 = ($agree and $published)
-            return {facet: $name, ok: $ok26, detail: ($detail + $" | terminal=($transition) prs=($pr_count) reason=($reason)")}
+            let short = (if $published { $branch_sha | str substring 0..12 } else { 'none' })
+            return {facet: $name, ok: $ok26, detail: ($detail + $" | terminal=($transition) branch=($short) bridge=($bridge.exit_code) reason=($reason)")}
         }
+        let pushed_c = (do { git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
         let split = ($reason | str contains 'workflow_error')
-        let unpublished = ($pr_count == 0)
+        let unpublished = (($pushed_c.stdout | str trim) | is-empty)
         let ok26c = ($split and $unpublished and ($transition == 'succeeded'))
-        return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) prs=($pr_count) reason=($reason)")}
+        let branch_state = (if $unpublished { 'none' } else { 'pushed' })
+        return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) branch=($branch_state) reason=($reason)")}
     }
     if $ok and $name == 'probe-16-hosthook' {
         # The host hook (sandbox = false) must have read a context file with
