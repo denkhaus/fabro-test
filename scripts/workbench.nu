@@ -72,6 +72,14 @@ const PROBES = [
     # closeout agent's exact tool set (fabro-9986's first productive
     # dependency, deterministically green before any lap relies on it).
     [probe-25-work-roundtrip succeeded]
+    # probe-26 (work#1029, user bench directive 2026-10-28): the
+    # terminal-status split net. The fixed shape (explicit conditional
+    # bounce) must land succeeded WITH the run PR; the catch-all twin
+    # (the pre-fix lane-graph shape) must land failed/workflow_error
+    # with NO PR — pinning both directions so any future fold/graph
+    # regression reddens the bench.
+    [probe-26-gate-bounce succeeded]
+    [probe-26-gate-bounce-catchall failed]
 ]
 
 def auth-header []: nothing -> record {
@@ -423,6 +431,30 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
         let deadlocked = ($reason | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+    }
+    if $ok and ($name == 'probe-26-gate-bounce' or $name == 'probe-26-gate-bounce-catchall') {
+        # work#1029: engine conclusion, terminal event, and platform
+        # record must agree, and the publish path must follow the
+        # record. The fixed shape asserts succeeded + PR; the catch-all
+        # twin asserts workflow_error + NO PR (the downgraded control).
+        let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
+        let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=1000" | get -o data | default [])
+        let terminal = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'run.lifecycle')} | last)
+        let transition = ($terminal | get -o item.record.transition | default '?')
+        let branch = $"fabro/run/($run_id)"
+        let prs = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number --limit 1 } | complete)
+        let pr_count = (try { $prs.stdout | from json | length } catch { 0 })
+        if $name == 'probe-26-gate-bounce' {
+            let agree = ($transition == 'succeeded')
+            let published = ($pr_count > 0)
+            let ok26 = ($agree and $published)
+            return {facet: $name, ok: $ok26, detail: ($detail + $" | terminal=($transition) prs=($pr_count) reason=($reason)")}
+        }
+        let split = ($reason | str contains 'workflow_error')
+        let unpublished = ($pr_count == 0)
+        let ok26c = ($split and $unpublished and ($transition == 'succeeded'))
+        return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) prs=($pr_count) reason=($reason)")}
     }
     if $ok and $name == 'probe-16-hosthook' {
         # The host hook (sandbox = false) must have read a context file with

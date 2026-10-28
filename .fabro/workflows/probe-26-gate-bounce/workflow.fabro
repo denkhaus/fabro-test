@@ -1,0 +1,30 @@
+digraph Probe26GateBounce {
+    graph [goal="A gate red bounced over an explicit conditional edge lands succeeded", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    tester [
+        label="Tester: gate red until delivered",
+        shape=parallelogram,
+        script="test -f .probe26-delivered",
+        timeout="30s",
+        max_retries=0
+    ]
+    implementer [
+        label="Implementer: deliver the marker",
+        shape=parallelogram,
+        script="touch .probe26-delivered",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> tester
+    # The work#1029 shape: the gate-red bounce is EXPLICIT conditional
+    # control flow (the tester's FINAL visit stays failed — nothing
+    # revisits it), the deadlock exit is the unconditional fallback the
+    # engine requires. The run must land succeeded in the platform
+    # record with the publish path running; the catch-all twin
+    # (probe-26-gate-bounce-catchall) pins the downgraded control.
+    tester -> implementer [label="Gate red", condition="outcome=failed"]
+    tester -> exit [label="Gate green", condition="outcome=succeeded"]
+    tester -> exit [x.kind="deadlock", label="Unroutable outcome, needs a human"]
+    implementer -> exit [label="Delivered"]
+}
