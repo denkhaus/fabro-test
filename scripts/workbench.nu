@@ -858,8 +858,44 @@ def main [] {
         }
         let notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
         $rows = ($rows | append {facet: '10 slack notification', ok: ($notif > 0), detail: $"notification.sent=($notif)"})
-        let pub = (do { nu scripts/publish-bridge.nu $mini_id } | complete)
-        $rows = ($rows | append {facet: '09 publish bridge', ok: ($pub.exit_code == 0), detail: ($pub.stdout | lines | last | default ($pub.stderr | str substring 0..120))})
+        # 09 publish (work#1049 rework): the ENGINE publish is live — the
+        # platform creates the run PR itself (author app/fabro-the-factory,
+        # e.g. PR #97 on the mini run 01M61ZKPX). The facet asserts the
+        # engine PR directly: exists, app-authored, body is generated prose
+        # (the fabro-4c11 line — a skeleton body fails the bench). The
+        # manual publish-bridge.nu is the FALLBACK only: driven when no
+        # engine PR appears (incident repair, fabro-ac40 legacy), asserting
+        # the branch push. Never both — the bridge double-creates and
+        # alarms against an existing engine PR (the stale-expectation red
+        # this rework replaces; the bridge exiting 1 over "Pull request
+        # already exists" was the bench's bug, not the platform's).
+        let branch = $"fabro/run/($mini_id)"
+        mut engine_pr = null
+        for _ in 1..6 {
+            let lst = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number,author --limit 1 } | complete)
+            let hits = (try { $lst.stdout | from json } catch { [] })
+            if ($hits | length) > 0 {
+                $engine_pr = ($hits | first)
+                break
+            }
+            sleep 5sec
+        }
+        if $engine_pr != null {
+            let num = ($engine_pr | get -o number | default 0)
+            let author = ($engine_pr | get -o author | get -o login | default '?')
+            let view = (do { ^gh pr view $num -R denkhaus/fabro-test --json body --jq '.body' } | complete)
+            let body_len = ($view.stdout | str trim | str length)
+            let app_ok = ($author == 'fabro-the-factory')
+            let prose_ok = ($body_len >= 120)
+            $rows = ($rows | append {facet: '09 publish (engine)', ok: ($app_ok and $prose_ok), detail: $"PR #($num) by ($author), body=($body_len) chars"})
+        } else {
+            # fallback: no engine PR — the bridge repairs (push the exact
+            # final commit as the run branch); assert the branch push
+            let bridged = (do { nu scripts/publish-bridge.nu $mini_id } | complete)
+            let pushed = (do { git ls-remote origin $"refs/heads/($branch)" } | complete)
+            let sha = ($pushed.stdout | str trim)
+            $rows = ($rows | append {facet: '09 publish (bridge fallback)', ok: (($sha | is-not-empty)), detail: $"no engine PR; bridge exit=($bridged.exit_code), branch=($sha | str substring 0..12 | default 'none')"})
+        }
     }
 
     print ''
@@ -880,6 +916,18 @@ def main [] {
     let fresh = ($red | where {|r| ($r.facet not-in $known_red)} | length)
     if ($fresh > 0) {
         print -e $"WORKBENCH RED: ($fresh) NEW facet failures"
+        # Red-exit hygiene (work#1049): a red bench must not poison the
+        # next one — the mini's run PR stays open and
+        # backpressureOpenPrCap=1 refuses the next publish (observed:
+        # PRs #95/#96 cascading). Close the mini's open PR on the way
+        # out; the branch stays as evidence.
+        let open = (do { ^gh pr list -R denkhaus/fabro-test --head $"fabro/run/($mini_id)" --state open --json number --limit 1 } | complete)
+        let hits = (try { $open.stdout | from json } catch { [] })
+        if ($hits | length) > 0 {
+            let num = ($hits | first | get number)
+            let _ = (do { ^gh pr close $num -R denkhaus/fabro-test --comment 'bench hygiene: red bench closes its mini PR so backpressureOpenPrCap does not refuse the next publish (work#1049)' } | complete)
+            print $"== hygiene: closed mini PR #($num) (red-exit)"
+        }
         exit 1
     }
     if ($red | is-not-empty) {
