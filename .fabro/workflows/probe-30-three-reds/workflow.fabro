@@ -1,0 +1,35 @@
+digraph Probe30ThreeReds {
+    graph [goal="The third consecutive gate red exits to the human instead of another round", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    tester [
+        label="Tester: always red",
+        shape=parallelogram,
+        script="exit 1",
+        timeout="30s",
+        max_retries=0
+    ]
+    implementer [
+        label="Implementer: cannot fix a red by design",
+        shape=parallelogram,
+        script="true",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> tester
+    # The work#1057 shape (restored fabro-6baf guard): the bounce carries
+    # the generation cap, so a red at generation >= 3 matches no
+    # conditional edge and lands on the unconditional deadlock fallback —
+    # the human exit. The bench asserts the run ends deadlocked, NOT
+    # workflow_error (a breaker cutting an unbounded bounce) and NOT
+    # succeeded. Threshold note: generation counts from 0 per completed
+    # visit, the same semantics the lane graphs' reviewer guard
+    # documents; if the circuit breaker (loop_restart_signature_limit=3)
+    # cuts the cycle before the guard fires, this probe reddens and the
+    # lane threshold needs lowering — that reachability question is
+    # exactly what this fixture answers.
+    tester -> implementer [label="Gate red", condition="outcome=failed && nodes.tester.generation < 3"]
+    tester -> exit [label="Gate green", condition="outcome=succeeded"]
+    tester -> exit [x.kind="deadlock", label="Gate deadlock (3 reds, needs a human)"]
+    implementer -> tester [label="Re-test"]
+}
