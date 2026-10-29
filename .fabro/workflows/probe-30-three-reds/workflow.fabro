@@ -1,5 +1,5 @@
 digraph Probe30ThreeReds {
-    graph [goal="The third consecutive gate red exits to the human instead of another round", default_max_retries=0, stall_timeout="5m"]
+    graph [goal="The third consecutive gate red exits to the human instead of another round", default_max_retries=0, stall_timeout="5m", max_node_visits=20]
     start [shape=Mdiamond]
     exit  [shape=Msquare]
     tester [
@@ -18,18 +18,20 @@ digraph Probe30ThreeReds {
     ]
     start -> tester
     # The work#1057 shape (restored fabro-6baf guard): the bounce carries
-    # the generation cap, so the third red matches no
-    # conditional edge and lands on the unconditional deadlock fallback —
-    # the human exit. The bench asserts the run ends deadlocked, NOT
-    # workflow_error (a breaker cutting an unbounded bounce) and NOT
-    # succeeded. Threshold note: generation counts from 0 per completed
-    # visit, the same semantics the lane graphs' reviewer guard
-    # documents; if the circuit breaker (loop_restart_signature_limit=3)
-    # cuts the cycle before the guard fires, this probe reddens and the
-    # lane threshold needs lowering — that reachability question is
-    # exactly what this fixture answers.
+    # the generation cap, so the third red matches no conditional edge and
+    # lands on the unconditional deadlock fallback — the human exit. The
+    # deadlock exit is the node's SOLE route to exit (fabro-843d
+    # sole_exit_route: a plain gate-green -> exit edge beside the kind edge
+    # would leave a success-shaped finish unclassified) — the same shape
+    # the lane graphs have (their green route runs through evidence, never
+    # a plain tester -> exit). The cap is 2, not 3, BY MEASUREMENT: with
+    # < 3 the circuit breaker (loop_restart_signature_limit=3) cuts the
+    # third loop signature workflow_error before a >= 3 guard can fire
+    # (first drive, run 01M636T77HA3QSKK4F6G93AQFV: two bounces then
+    # workflow_error at the third red). The bench asserts the run ends
+    # FAILED with reason=deadlock — the human exit — NOT workflow_error,
+    # NOT succeeded.
     tester -> implementer [label="Gate red", condition="outcome=failed && nodes.tester.generation < 2"]
-    tester -> exit [label="Gate green", condition="outcome=succeeded"]
     tester -> exit [x.kind="deadlock", label="Gate deadlock (3 reds, needs a human)"]
     implementer -> tester [label="Re-test"]
 }
