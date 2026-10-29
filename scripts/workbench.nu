@@ -92,6 +92,12 @@ const PROBES = [
     # probe-29 (work#1054): the gate env-scrub idiom — the engine injects
     # FABRO_SERVER (channel mount), the gate's cargo tiers must not see it.
     [probe-29-gate-env-scrub succeeded]
+    # probe-30 (work#1057, restored fabro-6baf guard): the third
+    # consecutive gate red exits to the human as a DEADLOCK — the check
+    # arm asserts reason=deadlock, not workflow_error (the breaker
+    # cutting an unbounded bounce) and not succeeded (a plain gate-green
+    # exit beside the kind edge would leave the finish unclassified).
+    [probe-30-three-reds failed]
 ]
 
 def auth-header []: nothing -> record {
@@ -439,6 +445,21 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)") }
     }
     if $ok and $name == 'probe-06-guards' {
+        let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
+        let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
+        let deadlocked = ($reason | str contains 'deadlock')
+        return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+    }
+    if $ok and $name == 'probe-30-three-reds' {
+        # work#1057: the third consecutive red must reach the HUMAN as a
+        # deadlock — reason=deadlock is the whole facet. The two failed
+        # shapes it discriminates: workflow_error (the breaker
+        # loop_restart_signature_limit cutting the third loop signature
+        # when the cap sat at generation < 3 — first drive, run
+        # 01M636T77HA3QSKK4F6G93AQFV) and succeeded (a plain gate-green
+        # -> exit edge beside the kind edge breaking fabro-843d
+        # sole_exit_route — second drive, run
+        # 01M63706VG9110QPCB8PB4TJXS).
         let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
         let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
         let deadlocked = ($reason | str contains 'deadlock')
