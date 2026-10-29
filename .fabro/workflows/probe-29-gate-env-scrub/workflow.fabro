@@ -1,0 +1,14 @@
+digraph Probe29GateEnvScrub {
+    graph [goal="The gate env scrub idiom neutralizes the engine-injected FABRO_SERVER", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    check [
+        label="Check: injected then scrubbed",
+        shape=parallelogram,
+        script="if [ -z \"$FABRO_SERVER\" ]; then echo 'FABRO_SERVER not injected - the ADR-0035 channel mount precondition changed'; exit 1; fi; env -u FABRO_SERVER sh -c '[ -z \"$FABRO_SERVER\" ]' && echo 'scrub idiom works' || { echo 'env -u failed to scrub'; exit 1; }",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> check
+    check -> exit [label="Scrubbed"]
+}

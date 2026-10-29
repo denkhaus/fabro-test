@@ -89,6 +89,9 @@ const PROBES = [
     # 01M60NX9W7N6 lost a filing to a clap reject here).
     [probe-27-gh-absent succeeded]
     [probe-28-work-create-argv succeeded]
+    # probe-29 (work#1054): the gate env-scrub idiom — the engine injects
+    # FABRO_SERVER (channel mount), the gate's cargo tiers must not see it.
+    [probe-29-gate-env-scrub succeeded]
 ]
 
 def auth-header []: nothing -> record {
