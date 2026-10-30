@@ -9,7 +9,7 @@ digraph ChannelProbe {
     probe [
         label="Probe: channel CLI + socket fs state",
         shape=parallelogram,
-        script="nu .fabro/workflows/channel-probe/scripts/probe.nu",
+        script="nu .fabro/workflows/probe-31-channel-cli/scripts/probe.nu",
         timeout="120s",
         max_retries=0
     ]
