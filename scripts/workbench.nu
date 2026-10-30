@@ -98,6 +98,15 @@ const PROBES = [
     # cutting an unbounded bounce) and not succeeded (a plain gate-green
     # exit beside the kind edge would leave the finish unclassified).
     [probe-30-three-reds failed]
+    # probe-31 (work#1073, born from the 2026-10-30 loop lap): the
+    # in-sandbox work CLI over the run channel — the exact evidence.nu
+    # call shape. Asserts every link: env token + FABRO_SERVER, the
+    # socket file in the sandbox fs (the compose bind), the handshake
+    # enforcement (403 bare / 200 with token), and the CLI round trip.
+    # The bench gap it closes: probes 23/25 drive the ENGINE work tools;
+    # nothing drove the channel CLI until the loop lap caught the
+    # fork.26/fork.27 version skew red in production.
+    [probe-31-channel-cli succeeded]
 ]
 
 def auth-header []: nothing -> record {
