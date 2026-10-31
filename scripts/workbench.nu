@@ -130,6 +130,15 @@ const PROBES = [
     # command arm fails loudly while the toolchain pin predates the
     # fork.29 pairing (the pin guard enforces tag == deployed server).
     [probe-35-mulch-binary succeeded]
+    # probe-36 (ADR-0038 stage 4, denkhaus/work#1082): the run-end
+    # observation filing round-trip — a terminal run's painpoint
+    # observation files a linked covering item through the settings-gated
+    # hook (file arm), and a second identical run dedupes at the change
+    # level: no second item, the existing one linked (dedupe arm). The
+    # filing setting toggles ON around these two rows (probe-run flips
+    # it for probe-36*, main restores OFF before the mini).
+    [probe-36-filing-file succeeded]
+    [probe-36-filing-dedupe succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -139,6 +148,25 @@ def auth-header []: nothing -> record {
     let s = (open ~/.fabro/auth.json | get servers | get -o (server))
     let token = ($s | get -o token | default ($s | get -o access_token | default ''))
     { Authorization: $"Bearer ($token)" }
+}
+
+# The observation-filing gate (ADR-0038 stage 4): flip
+# [server.observations] filing_enabled on/off inside the LOCAL stack's
+# settings.toml — the server's hot-reload poller picks the change up
+# within seconds. Marker-guarded: ON appends only when absent, OFF
+# deletes exactly the marker block. probe-36's rows are the only
+# consumers; OFF is idempotent.
+def filing-toggle [on: bool] {
+    let p = '/storage/.home/settings.toml'
+    let cmd = if $on {
+        'grep -q probe-36-filing-toggle ' + $p + ' || printf "\n# probe-36-filing-toggle\n[server.observations]\nfiling_enabled = true\n" >> ' + $p
+    } else {
+        'sed -i "/probe-36-filing-toggle/,+2d" ' + $p
+    }
+    let res = (do { ^docker exec fabro-lokal sh -c $cmd } | complete)
+    if $res.exit_code != 0 {
+        print -e $"workbench: filing-toggle on=($on) failed: ($res.stderr | str trim)"
+    }
 }
 
 def fail [msg: string]: nothing -> nothing {
@@ -425,6 +453,13 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     if $name starts-with 'probe-25' {
         probe25-target-ensure
     }
+    # The filing rows need the gate OPEN before their run reaches its
+    # terminal record — the hook enqueues AT the terminal append (the
+    # full bench also restores OFF before the mini; the dedupe arm is
+    # the single-probe path's restorer).
+    if $name starts-with 'probe-36' {
+        filing-toggle true
+    }
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
     # expect rides as a LABEL: a failed run in the list must be recognizable
@@ -621,6 +656,89 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         })
         let ok34 = ($granted and $linked and $refused and $forced_ok)
         return {facet: $name, ok: $ok34, detail: ($detail + $" | granted=($granted) linked=($linked) refused=($refused) refusal_detail=($refusal_detail | str substring 0..80) forced=($forced_ok) seq=($seq)") }
+    }
+    if $ok and $name == 'probe-36-filing-file' {
+        # ADR-0038 stage 4, file arm: the run went terminal with the
+        # filing gate open, so the run-end hook enqueued at the terminal
+        # record and the reconciler's next pass (30s cadence + one
+        # distillation call) files a covering item whose body cites the
+        # run (the Basis line). Poll for it; the item stays OPEN for the
+        # dedupe arm, which closes it after proving the second run links
+        # instead of refiling.
+        let items_url = $"((server))/api/v1/projects/fabro-proof/work-items"
+        mut filed = null
+        mut waited = 0
+        while $filed == null and $waited < 30 {
+            sleep 5sec
+            $waited = ($waited + 1)
+            let hits = (http get --headers (auth-header) $"($items_url)?query=($run_id)" | get -o data | default [])
+            let citing = ($hits | where {|h| ($h | get -o body | default '') | str contains $run_id })
+            if ($citing | is-not-empty) { $filed = ($citing | first) }
+        }
+        if $filed == null {
+            return {facet: $name, ok: false, detail: ($detail + " | no filed item citing the run within 150s") }
+        }
+        let basis_ok = (($filed | get -o body | default '') | str contains $"Basis: run ($run_id)")
+        let revision_ok = ('revision' in ($filed | get -o labels | default []))
+        return {facet: $name, ok: ($basis_ok and $revision_ok), detail: ($detail + $" | item=($filed | get -o itemKey) basis=($basis_ok) revision=($revision_ok)") }
+    }
+    if $ok and $name == 'probe-36-filing-dedupe' {
+        # ADR-0038 stage 4, dedupe arm: an identical second run's
+        # painpoint must NOT file a second item — the change-dedupe
+        # finds the first run's open item and LINKS it to this run's
+        # observation (proven by the unlink/relink roundtrip on the
+        # (run, seq) identity). The arm closes the item afterwards
+        # (bench cleanup) and restores the filing gate OFF (the
+        # single-probe path's restorer; the full bench also restores).
+        let items_url = $"((server))/api/v1/projects/fabro-proof/work-items"
+        # No re-filed item may cite THIS run within the filing window.
+        mut refiled = false
+        mut waited = 0
+        while $waited < 24 and not $refiled {
+            sleep 5sec
+            $waited = ($waited + 1)
+            let hits = (http get --headers (auth-header) $"($items_url)?query=($run_id)" | get -o data | default [])
+            $refiled = ($hits | where {|h| ($h | get -o body | default '') | str contains $run_id } | is-not-empty)
+        }
+        mut ok36 = (not $refiled)
+        mut notes = $"refiled=($refiled)"
+        # The first run's covering item (still open from the file arm).
+        let covering = (do {
+            let hits = (http get --headers (auth-header) $"($items_url)?query=probe-36" | get -o data | default [])
+            $hits | where {|h| ($h | get -o state | default '') == 'open' } | where {|h| 'probe-36' in ($h | get -o title | default '') } | first
+        })
+        # The link edge: this run's observation (seq off the folded view)
+        # is linked to the covering item — unlink reports true, relink
+        # restores it.
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let seq = ($stages | get -o $stage_key | default {} | get -o observations | default [] | first | get -o seq | default 0)
+        mut linked = false
+        if ($covering | is-not-empty) and $seq > 0 {
+            let key = ($covering | get -o itemKey)
+            let removed = (http delete --headers (auth-header) -t 'application/json' $"($items_url)/link" -d {
+                itemKey: $key,
+                runId: $run_id,
+                seq: $seq
+            })
+            $linked = (($removed | get -o removed | default false))
+            if $linked {
+                let _ = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
+                    itemKey: $key,
+                    runId: $run_id,
+                    seq: $seq
+                })
+            }
+            # Cleanup: the covering item closes with its radius proven.
+            let _ = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+                itemKey: $key,
+                reason: "probe-36: filing round-trip proven, bench cleanup"
+            })
+        }
+        $ok36 = ($ok36 and $linked and ($covering | is-not-empty))
+        $notes = ($notes + $" linked=($linked) covering=(if ($covering | is-empty) { 'none' } else { $covering | get -o itemKey }) seq=($seq)")
+        return {facet: $name, ok: $ok36, detail: ($detail + $" | ($notes)") }
     }
     if $ok and ($name == 'probe-26-gate-bounce' or $name == 'probe-26-gate-bounce-catchall') {
         # work#1029: engine conclusion, terminal event, and platform
@@ -1011,6 +1129,9 @@ def main [] {
         print $"-- ($p.name)"
         $rows = ($rows | append (probe-run $p.name $p.expect $bench_id))
     }
+    # The filing gate closes before the mini (its runs record painpoints
+    # too; only the probe-36 rows prove the filing pipeline).
+    filing-toggle false
 
     print '== workbench: mini integration (seed loop + publish)'
     seed-ensure
