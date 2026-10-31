@@ -661,35 +661,66 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         # ADR-0038 stage 4, file arm: the run went terminal with the
         # filing gate open, so the run-end hook enqueued at the terminal
         # record and the reconciler's next pass (30s cadence + one
-        # distillation call) files a covering item whose body cites the
-        # run (the Basis line). Poll for it; the item stays OPEN for the
-        # dedupe arm, which closes it after proving the second run links
-        # instead of refiling.
+        # distillation call) settles the run's painpoint EITHER as a
+        # freshly filed covering item (first pass; the Basis line and
+        # revision label must ride along) OR — decision 3's semantics —
+        # LINKED to the standing open probe-36 item (every later pass).
+        # Both outcomes prove the pipeline; the (run, seq) link is the
+        # provenance in both. The standing item stays OPEN forever:
+        # closing it would shadow fresh candidates (correct product
+        # semantics, broken bench cycles).
         let items_url = $"((server))/api/v1/projects/fabro-proof/work-items"
-        mut filed = null
+        mut filed = {}
         mut waited = 0
-        while $filed == null and $waited < 30 {
+        while ($filed | is-empty) and $waited < 30 {
             sleep 5sec
             $waited = ($waited + 1)
             let hits = (http get --headers (auth-header) $"($items_url)?query=($run_id)" | get -o data | default [])
             let citing = ($hits | where {|h| ($h | get -o body | default '') | str contains $run_id })
             if ($citing | is-not-empty) { $filed = ($citing | first) }
         }
-        if $filed == null {
-            return {facet: $name, ok: false, detail: ($detail + " | no filed item citing the run within 150s") }
+        if ($filed | is-not-empty) {
+            let basis_ok = (($filed | get -o body | default '') | str contains $"Basis: run ($run_id)")
+            let revision_ok = ('revision' in ($filed | get -o labels | default []))
+            return {facet: $name, ok: ($basis_ok and $revision_ok), detail: ($detail + $" | filed item=($filed | get -o itemKey) basis=($basis_ok) revision=($revision_ok)") }
         }
-        let basis_ok = (($filed | get -o body | default '') | str contains $"Basis: run ($run_id)")
-        let revision_ok = ('revision' in ($filed | get -o labels | default []))
-        return {facet: $name, ok: ($basis_ok and $revision_ok), detail: ($detail + $" | item=($filed | get -o itemKey) basis=($basis_ok) revision=($revision_ok)") }
+        # No fresh item: the standing open item must carry this run's
+        # link — the unlink/relink roundtrip on the (run, seq) identity.
+        let standing = (http get --headers (auth-header) $"($items_url)?query=probe-36" | get -o data | default [] | where {|h|
+            (($h | get -o state | default '') == 'open') and ('probe-36' in ($h | get -o title | default ''))
+        })
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let seq = ($stages | get -o $stage_key | default {} | get -o observations | default [] | first | get -o seq | default 0)
+        if ($standing | is-empty) or $seq == 0 {
+            return {facet: $name, ok: false, detail: ($detail + $" | neither a fresh item nor a linkable standing item (standing=($standing | length) seq=($seq))") }
+        }
+        let key = ($standing | first | get -o itemKey)
+        let removed = (http post --headers (auth-header) -t 'application/json' $"($items_url)/unlink" {
+            itemKey: $key,
+            runId: $run_id,
+            seq: $seq
+        })
+        let linked = (($removed | get -o removed | default false))
+        if $linked {
+            let _ = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
+                itemKey: $key,
+                runId: $run_id,
+                seq: $seq
+            })
+        }
+        return {facet: $name, ok: $linked, detail: ($detail + $" | linked to standing item=($key) seq=($seq)") }
     }
     if $ok and $name == 'probe-36-filing-dedupe' {
         # ADR-0038 stage 4, dedupe arm: an identical second run's
         # painpoint must NOT file a second item — the change-dedupe
-        # finds the first run's open item and LINKS it to this run's
+        # finds the standing open item and LINKS it to this run's
         # observation (proven by the unlink/relink roundtrip on the
-        # (run, seq) identity). The arm closes the item afterwards
-        # (bench cleanup) and restores the filing gate OFF (the
-        # single-probe path's restorer; the full bench also restores).
+        # (run, seq) identity). The standing item stays open (the file
+        # arm's comment explains why); this arm restores the filing gate
+        # OFF (the single-probe path's restorer; the full bench also
+        # restores before the mini).
         let items_url = $"((server))/api/v1/projects/fabro-proof/work-items"
         # No re-filed item may cite THIS run within the filing window.
         mut refiled = false
@@ -703,10 +734,10 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         mut ok36 = (not $refiled)
         mut notes = $"refiled=($refiled)"
         # The first run's covering item (still open from the file arm).
-        let covering = (do {
-            let hits = (http get --headers (auth-header) $"($items_url)?query=probe-36" | get -o data | default [])
-            $hits | where {|h| ($h | get -o state | default '') == 'open' } | where {|h| 'probe-36' in ($h | get -o title | default '') } | first
+        let covering_hits = (http get --headers (auth-header) $"($items_url)?query=probe-36" | get -o data | default [] | where {|h|
+            (($h | get -o state | default '') == 'open') and ('probe-36' in ($h | get -o title | default ''))
         })
+        let covering = (if ($covering_hits | is-empty) { null } else { $covering_hits | first })
         # The link edge: this run's observation (seq off the folded view)
         # is linked to the covering item — unlink reports true, relink
         # restores it.
@@ -717,7 +748,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         mut linked = false
         if ($covering | is-not-empty) and $seq > 0 {
             let key = ($covering | get -o itemKey)
-            let removed = (http delete --headers (auth-header) -t 'application/json' $"($items_url)/link" -d {
+            let removed = (http post --headers (auth-header) -t 'application/json' $"($items_url)/unlink" {
                 itemKey: $key,
                 runId: $run_id,
                 seq: $seq
@@ -730,14 +761,16 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
                     seq: $seq
                 })
             }
-            # Cleanup: the covering item closes with its radius proven.
-            let _ = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
-                itemKey: $key,
-                reason: "probe-36: filing round-trip proven, bench cleanup"
-            })
+            # The standing item stays OPEN — later passes link into it;
+            # closing it would shadow their candidates (the closed-item
+            # drop is correct product semantics and would break the
+            # bench's repeated cycles).
         }
         $ok36 = ($ok36 and $linked and ($covering | is-not-empty))
         $notes = ($notes + $" linked=($linked) covering=(if ($covering | is-empty) { 'none' } else { $covering | get -o itemKey }) seq=($seq)")
+        # Single-probe path's restorer: the filing gate closes here (the
+        # full bench also restores before the mini — both idempotent).
+        filing-toggle false
         return {facet: $name, ok: $ok36, detail: ($detail + $" | ($notes)") }
     }
     if $ok and ($name == 'probe-26-gate-bounce' or $name == 'probe-26-gate-bounce-catchall') {
