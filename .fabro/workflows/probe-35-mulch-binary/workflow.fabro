@@ -1,0 +1,13 @@
+digraph Probe35MulchBinary {
+    graph [goal="The toolchain sandbox carries the native mulch binary, not ml (work#1070)", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    check [
+        label="Check: mulch present, ml absent",
+        shape=parallelogram,
+        script="mulch --version >/dev/null 2>&1 || { echo 'mulch IS absent - the toolchain pin predates the work 1070 cutover, needs the fork.29 pairing'; exit 1; }; command -v ml >/dev/null 2>&1 && { echo 'ml IS present - the retired reference binary ships beside mulch'; exit 1; }; echo 'mulch present, ml absent (work 1070 cutover)'",
+        timeout="30s",
+        max_retries=0
+    ]
+    start -> check
+    check -> exit [label="Mulch present"]
