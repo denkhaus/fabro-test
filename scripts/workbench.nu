@@ -441,6 +441,23 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: false, detail: 'expected an admission refusal, but create succeeded'}
     }
     let run_id = ($created.stdout | from json | get -o run_id | default '')
+    # The run TITLE carries the expectation (user directive 2026-10-31):
+    # a must-fail probe's red run and a must-succeed probe's green run are
+    # distinguishable on the board at a glance — the expect LABEL stays,
+    # but titles are what the board shows. Admission-refused probes have
+    # no run to title.
+    if ($run_id | is-not-empty) and ($expect in ['succeeded' 'failed']) {
+        let prefix = (if $expect == 'succeeded' { 'must-succeed' } else { 'must-fail' })
+        let titled = (try {
+            http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)" {title: $"($prefix): ($name)"}
+        } catch {|err|
+            print -e $"workbench: title patch failed for ($name): ($err.msg | str substring 0..120)"
+            null
+        })
+        if ($titled | get -o title | default '') != $"($prefix): ($name)" {
+            print -e $"workbench: title prefix not confirmed for ($name) — the board loses the must-($expect) marker"
+        }
+    }
     if ($run_id | is-empty) { return {facet: $name, ok: false, detail: 'no run_id'} }
     let started = (do { ^$FABRO start $run_id --server (server) } | complete)
     if $started.exit_code != 0 {
@@ -999,6 +1016,11 @@ def main [] {
     let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
+    # The integration run carries the same board marker (user directive
+    # 2026-10-31): a red mini is always an unexpected failure.
+    let _ = (try {
+        http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($mini_id)" {title: "must-succeed: mini seed loop"}
+    } catch {|err| print -e $"workbench: mini title patch failed: ($err.msg | str substring 0..120)" })
     let _ = (do { ^$FABRO start $mini_id --server (server) } | complete)
     let mw = (do { ^$FABRO wait $mini_id --json --server (server) } | complete)
     let mini_ok = ($mw.stdout | from json | get -o status | default 'failed') == 'succeeded'
