@@ -11,3 +11,4 @@ digraph Probe35MulchBinary {
     ]
     start -> check
     check -> exit [label="Mulch present"]
+}
