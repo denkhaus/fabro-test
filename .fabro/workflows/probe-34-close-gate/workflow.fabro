@@ -3,7 +3,7 @@ digraph Probe34CloseGate {
     start [shape=Mdiamond]
     exit  [shape=Msquare]
     recorder [
-        label="Recorder: one painpoint observation",
+        label="Recorder: one note observation",
         prompt="@prompts/recorder.md",
         max_visits=3,
         x.observations="required",

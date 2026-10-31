@@ -1,0 +1,14 @@
+digraph Probe36ObservationFiling {
+    graph [goal="The run-end observation filing round-trip: a painpoint observation files a linked covering item", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    recorder [
+        label="Recorder: one painpoint observation",
+        prompt="@prompts/recorder.md",
+        max_visits=3,
+        x.observations="required",
+        x.fabro_tools="fabro_observation_record",
+        x.tools="read_file"
+    ]
+    start -> recorder -> exit
+}
