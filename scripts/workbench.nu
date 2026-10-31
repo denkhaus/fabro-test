@@ -1015,8 +1015,25 @@ def main [] {
             $after = ($page | last | get stream_seq)
             $evs = ($evs | append $page)
         }
-        let notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
-        $rows = ($rows | append {facet: '10 slack notification', ok: ($notif > 0), detail: $"notification.sent=($notif)"})
+        # The notification append rides a sub-second race past the
+        # walk's window (observed bench 1031: terminal seq 353 walked,
+        # notification.sent seq 354 landed milliseconds later — the
+        # event IS in the stream, the count raced it). Poll briefly
+        # before declaring the facet red; the durable property is the
+        # record, not the instant.
+        mut notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
+        mut polls = 0
+        while $notif == 0 and $polls < 5 {
+            sleep 2sec
+            $polls = ($polls + 1)
+            let tail = (http get --headers (auth-header) $"((server))/api/v1/runs/($mini_id)/events?limit=1000&after=($after)" | get -o data | default [])
+            if ($tail | is-not-empty) {
+                $after = ($tail | last | get stream_seq)
+                $evs = ($evs | append $tail)
+            }
+            $notif = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'notification.sent')} | length)
+        }
+        $rows = ($rows | append {facet: '10 slack notification', ok: ($notif > 0), detail: $"notification.sent=($notif) polls=($polls)"})
         # 09 publish (work#1049 rework): the ENGINE publish is live — the
         # platform creates the run PR itself (author app/fabro-the-factory,
         # e.g. PR #97 on the mini run 01M61ZKPX). The facet asserts the
@@ -1085,7 +1102,7 @@ def main [] {
         if ($hits | length) > 0 {
             let num = ($hits | first | get number)
             let _ = (do { ^gh pr close $num -R denkhaus/fabro-test --comment 'bench hygiene: red bench closes its mini PR so backpressureOpenPrCap does not refuse the next publish (work#1049)' } | complete)
-            print $"== hygiene: closed mini PR #($num) (red-exit)"
+            print $"== hygiene: closed mini PR #($num) — red-exit"
         }
         exit 1
     }
