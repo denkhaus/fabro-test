@@ -118,6 +118,13 @@ const PROBES = [
     # stage with bad_output and a reason that names the tool and the
     # "nothing durable to record" empty entry, and the run goes red.
     [probe-33-observation-contract failed]
+    # probe-34 (ADR-0038 stage 3, denkhaus/work#1082): the closure-radius
+    # gate end to end — the run's own observation record (its (run, seq)
+    # identity read off the folded stage view) blocks a linked item's
+    # close with the 409 listing, and force overrides with the response
+    # echoing exactly the overridden item. All HTTP; no binary in the
+    # path.
+    [probe-34-close-gate succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -518,6 +525,80 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let bad_output = ($raw | str contains 'bad_output')
         let ok33 = ($names_tool and $teaches_empty and $bad_output)
         return {facet: $name, ok: $ok33, detail: ($detail + $" | names_tool=($names_tool) empty_entry=($teaches_empty) class=($bad_output)") }
+    }
+    if $ok and $name == 'probe-34-close-gate' {
+        # ADR-0038 stage 3: the whole chain in one facet — the run's own
+        # observation (the (run, seq) identity off the folded stage
+        # view), a user claim of the closer item for THIS run (the
+        # claims-history edge), the user link of a blocker item to that
+        # observation, then BOTH close arms: unforced -> 409 naming the
+        # blocker, forced -> 200 with overriddenRadius echoing exactly
+        # the blocker. Pure HTTP against the stack.
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let observations = ($stages | get -o $stage_key | default {} | get -o observations | default [])
+        let seq = ($observations | first | get -o seq | default 0)
+        let text_ok = (($observations | first | get -o text | default '') == 'probe-34 radius blocker observation')
+        let project = 'fabro-proof'
+        let tag = (date now | format date '%m%d-%H%M%S')
+        let items_url = $"((server))/api/v1/projects/($project)/work-items"
+        let closer = (http post --headers (auth-header) -t 'application/json' $items_url {
+            title: $"probe-34 closer ($tag)",
+            body: $"probe-34 closer body ($tag)",
+            labels: [$"bench=($tag)"]
+        })
+        let blocker = (http post --headers (auth-header) -t 'application/json' $items_url {
+            title: $"probe-34 blocker ($tag)",
+            body: $"probe-34 blocker body ($tag)",
+            labels: [$"bench=($tag)"]
+        })
+        let closer_key = ($closer | get -o itemKey | default '')
+        let blocker_key = ($blocker | get -o itemKey | default '')
+        let setup_ok = ($text_ok and ($seq > 0) and (not ($closer_key | is-empty)) and (not ($blocker_key | is-empty)))
+        if not $setup_ok {
+            return {facet: $name, ok: false, detail: ($detail + $" | setup: text=($text_ok) seq=($seq) closer=($closer_key) blocker=($blocker_key)") }
+        }
+        # The claims-history edge: THIS run claimed the closer item.
+        let grant = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/projects/($project)/claims" {
+            itemKey: $closer_key,
+            runId: $run_id,
+            lane: 'loop'
+        })
+        let granted = (($grant | get -o outcome | default '') in ['granted' 'already_held'])
+        # The link edge: the blocker item is linked to the observation.
+        let link = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
+            itemKey: $blocker_key,
+            runId: $run_id,
+            seq: $seq
+        })
+        let linked = (($link | get -o outcome | default '') == 'linked')
+        # Arm 1 — unforced close: 409, the listing names the blocker.
+        # Status discrimination by body SHAPE, not `metadata`: the -e
+        # error-response value carries no http_response metadata here, a
+        # 200 body has item/overriddenRadius keys, the refusal has
+        # errors[0].detail.
+        let refusal = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $closer_key,
+            reason: $"probe-34 ($tag): unforced close must refuse over the open radius"
+        })
+        let refusal_detail = ($refusal | get -o errors | default [] | first | get -o detail | default '')
+        let refused = (($refusal | get -o errors) != null) and ($refusal_detail | str contains $blocker_key) and ($refusal_detail | str contains 'force')
+        # Arm 2 — forced close: 200, the echo names exactly the blocker.
+        let forced = (http post --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $closer_key,
+            reason: $"probe-34 ($tag): forced over the open radius",
+            force: true
+        })
+        let overridden = ($forced | get -o overriddenRadius | default [])
+        let forced_ok = (($forced | get -o item | get -o state | default '') == 'closed') and (($overridden | length) == 1) and (($overridden | first | get -o itemKey | default '') == $blocker_key)
+        # Cleanup: the blocker closes with an empty radius of its own.
+        let _ = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $blocker_key,
+            reason: $"probe-34 ($tag): bench cleanup"
+        })
+        let ok34 = ($granted and $linked and $refused and $forced_ok)
+        return {facet: $name, ok: $ok34, detail: ($detail + $" | granted=($granted) linked=($linked) refused=($refused) refusal_detail=($refusal_detail | str substring 0..80) forced=($forced_ok) seq=($seq)") }
     }
     if $ok and ($name == 'probe-26-gate-bounce' or $name == 'probe-26-gate-bounce-catchall') {
         # work#1029: engine conclusion, terminal event, and platform
