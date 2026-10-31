@@ -125,6 +125,11 @@ const PROBES = [
     # echoing exactly the overridden item. All HTTP; no binary in the
     # path.
     [probe-34-close-gate succeeded]
+    # probe-35 (work#1070, the mulch cutover): the toolchain sandbox
+    # carries the NATIVE mulch binary and NOT the retired ml — the
+    # command arm fails loudly while the toolchain pin predates the
+    # fork.29 pairing (the pin guard enforces tag == deployed server).
+    [probe-35-mulch-binary succeeded]
 ]
 
 def auth-header []: nothing -> record {
