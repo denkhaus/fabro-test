@@ -1,0 +1,14 @@
+digraph Probe33ObservationContract {
+    graph [goal="A required stage that never records is invalid", default_max_retries=0, stall_timeout="5m"]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    skipper [
+        label="Skipper: required but never records",
+        prompt="@prompts/skipper.md",
+        max_visits=3,
+        x.observations="required",
+        x.fabro_tools="fabro_observation_record",
+        x.tools="read_file"
+    ]
+    start -> skipper -> exit
+}

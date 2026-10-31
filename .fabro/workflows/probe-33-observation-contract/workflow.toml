@@ -1,0 +1,20 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+# The run-level switch for the run-tool family (the node's x.fabro_tools
+# pins are inert without it): the skipper's fabro_observation_record
+# grant rides this setting — the contract fires because the stage HAS
+# the tool and does not call it, not because the grant went missing.
+[run.agent]
+fabro_tools = true
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

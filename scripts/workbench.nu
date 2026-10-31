@@ -107,6 +107,17 @@ const PROBES = [
     # nothing drove the channel CLI until the loop lap caught the
     # fork.26/fork.27 version skew red in production.
     [probe-31-channel-cli succeeded]
+    # probe-32 (ADR-0038 stage 1, denkhaus/work#1082): a granted stage
+    # records one observation and the entry reaches the run's stream —
+    # the tool call (pebble ToolCallCompleted), the platform record
+    # (observation.recorded with the exact category and text), both
+    # asserted on the events the run left behind.
+    [probe-32-observation-record succeeded]
+    # probe-33 (ADR-0038 stage 1): a required stage that never calls the
+    # recorder is INVALID — the engine's presence contract fails the
+    # stage with bad_output and a reason that names the tool and the
+    # "nothing durable to record" empty entry, and the run goes red.
+    [probe-33-observation-contract failed]
 ]
 
 def auth-header []: nothing -> record {
@@ -473,6 +484,40 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
         let deadlocked = ($reason | str contains 'deadlock')
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+    }
+    if $ok and $name == 'probe-32-observation-record' {
+        # ADR-0038 stage 1: the tool call, the platform record, AND the
+        # live fold must all hold — the pebble ToolCallCompleted for
+        # fabro_observation_record, the observation.recorded record with
+        # the exact category and text on the stream, and the projection
+        # folding the entry onto the recorder stage's observations.
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let raw = ($evs | to json -r)
+        let called = ($raw | str contains '"tool_name":"fabro_observation_record"')
+        let records = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'observation.recorded')})
+        let record_ok = ($records | length) > 0
+        let entry = ($records | first | get -o item.record | default {})
+        let payload_ok = (($entry | get -o category | default '') == 'note') and (($entry | get -o text | default '') == 'probe-32 recorded an observation')
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let stage = ($stages | get -o $stage_key | default {})
+        let folded = ($stage | get -o observations | default [])
+        let fold_ok = (($folded | length) == 1) and (($folded | first | get -o category | default '') == 'note') and (($folded | first | get -o text | default '') == 'probe-32 recorded an observation')
+        let ok32 = ($called and $record_ok and $payload_ok and $fold_ok)
+        return {facet: $name, ok: $ok32, detail: ($detail + $" | tool_call=($called) records=(($records | length)) payload=($payload_ok) fold=($fold_ok)") }
+    }
+    if $ok and $name == 'probe-33-observation-contract' {
+        # ADR-0038 stage 1: the violation's failure must TEACH — the run
+        # went red (the expect facet), and the events carry the presence
+        # contract's reason: the tool name and the explicit empty entry.
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let raw = ($evs | to json -r)
+        let names_tool = ($raw | str contains 'fabro_observation_record')
+        let teaches_empty = ($raw | str contains 'nothing durable to record')
+        let bad_output = ($raw | str contains 'bad_output')
+        let ok33 = ($names_tool and $teaches_empty and $bad_output)
+        return {facet: $name, ok: $ok33, detail: ($detail + $" | names_tool=($names_tool) empty_entry=($teaches_empty) class=($bad_output)") }
     }
     if $ok and ($name == 'probe-26-gate-bounce' or $name == 'probe-26-gate-bounce-catchall') {
         # work#1029: engine conclusion, terminal event, and platform
