@@ -130,6 +130,17 @@ const PROBES = [
     # command arm fails loudly while the toolchain pin predates the
     # fork.29 pairing (the pin guard enforces tag == deployed server).
     [probe-35-mulch-binary succeeded]
+    # probe-37 (ADR-0039 stage C, denkhaus/work#1107): the script-stage
+    # door of the observation surface — stage self-awareness (the engine
+    # binds FABRO_RUN_ID/FABRO_NODE_ID/FABRO_EXECUTION/FABRO_FIRING into
+    # command scripts) and `fabro observation record` through the run
+    # channel with NO identity flags. The post-check asserts the record
+    # landed AND folded onto the recorder's stage card — the fold only
+    # holds when the env-bound position IS the stage's real position.
+    # Window note: the CLI arm needs the pinned toolchain to carry the
+    # verb (fork.30); until then it fails loudly with the skew named
+    # (the probe-35 precedent).
+    [probe-37-observation-cli succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -657,6 +668,25 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let ok26c = ($split and $unpublished and ($transition == 'succeeded'))
         let branch_state = (if $unpublished { 'none' } else { 'pushed' })
         return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) branch=($branch_state) reason=($reason)")}
+    }
+    if $ok and $name == 'probe-37-observation-cli' {
+        # ADR-0039 stage C: the script-stage door's landing — the record
+        # on the stream with the exact payload, and the FOLD onto the
+        # recorder stage's card. The fold is the position proof: it only
+        # holds when the env-bound (execution, firing) pair the CLI sent
+        # IS the stage's real position (a wrong pair leaves the record
+        # stream-only, an unknown firing).
+        let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
+        let records = ($evs | where {|e| (($e | get -o item.record.kind | default '') == 'observation.recorded')})
+        let entry = ($records | first | get -o item.record | default {})
+        let payload_ok = (($entry | get -o category | default '') == 'note') and (($entry | get -o text | default '') == 'probe-37 recorded from a script stage')
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let folded = ($stages | get -o $stage_key | default {} | get -o observations | default [])
+        let fold_ok = (($folded | length) == 1) and (($folded | first | get -o text | default '') == 'probe-37 recorded from a script stage')
+        let ok37 = (($records | length) == 1) and $payload_ok and $fold_ok
+        return {facet: $name, ok: $ok37, detail: ($detail + $" | records=(($records | length)) payload=($payload_ok) fold=($fold_ok)") }
     }
     if $ok and $name == 'probe-16-hosthook' {
         # The host hook (sandbox = false) must have read a context file with
