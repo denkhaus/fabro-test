@@ -141,6 +141,19 @@ const PROBES = [
     # verb (fork.30); until then it fails loudly with the skew named
     # (the probe-35 precedent).
     [probe-37-observation-cli succeeded]
+    # probe-39 (ADR-0039 stage D part 2, denkhaus/work#1107): the
+    # adjudicator's four READ doors over the run channel — run queue,
+    # observation list, work radius, work comments — driven with the
+    # SAME argv the fast-path script drives (pinned equal to the fabro
+    # repo's work-channel builders by the lane-commons battery), with
+    # the JSON RECORD shapes the fast path parses. The shapes are the
+    # point: a record/array drift silently empties a production read
+    # (the observation list's bare array was caught by exactly this
+    # contract, pinned in fabro's orchestration ITs). Radius/comments
+    # need an open proof item — proof-ensure runs first.
+    # Window note: every leg needs the fork.30 toolchain pin; until
+    # then the probe fails loudly naming the skew (probe-35/37 class).
+    [probe-39-adjudicator-reads succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -430,7 +443,7 @@ def pebble-event [e: record]: nothing -> any {
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
     let t0 = (date now)
     ensure-sync
-    if $name starts-with 'probe-23' or $name starts-with 'probe-24' {
+    if $name starts-with 'probe-23' or $name starts-with 'probe-24' or $name starts-with 'probe-39' {
         proof-ensure
     }
     if $name starts-with 'probe-25' {
