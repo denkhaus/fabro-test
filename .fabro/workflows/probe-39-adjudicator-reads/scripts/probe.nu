@@ -78,6 +78,15 @@ def main []: nothing -> nothing {
     let queue_record = (record-of $queue.stdout 'data' 'run queue')
     print $"queue: ($queue_record.data | length) run(s) queued on merge/develop"
 
+    # work#1113: every claimed entry carries the claim's project — queue
+    # consumers read scoped doors with it, never a hardcoded project id.
+    let claimed = ($queue_record.data | where {|e| ($e | get -o work_item) != null})
+    let projectless = ($claimed | where {|e| ($e | get -o project | default '') | is-empty})
+    if ($projectless | length) > 0 {
+        fail $"claimed queue entries must carry the claim's project (work#1113): ($projectless | to json -r)"
+    }
+    print $"queue: ($claimed | length) claimed entr(y|ies) carry the claim's project"
+
     # grammar: a bogus field refuses teaching the two fields
     let refused = (door ['run' 'queue' '--field' 'bogus' '--json' '--server' $sock])
     if $refused.exit_code == 0 { fail 'a bogus --field must refuse, not succeed' }
