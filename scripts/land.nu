@@ -17,8 +17,38 @@ def fail [msg: string]: nothing -> nothing {
 
 def main [subject: string]: nothing -> nothing {
     let branch = 'bench/workbench'
-    let sw = (do { git checkout -B $branch --quiet } | complete)
-    if $sw.exit_code != 0 { fail $"land: branch: ($sw.stderr | str trim | str substring 0..200)" }
+    # Sync FIRST (sprint-74 retro, 2026-11-02): a stale local main cut the
+    # branch from a pre-merge base — the prior PR's squash-merge showed up
+    # as a duplicate commit and GitHub answered CONFLICTING (PR #125).
+    let f0 = (do { git fetch --prune origin --quiet } | complete)
+    if $f0.exit_code != 0 {
+        fail $"land: fetch: ($f0.stderr | str trim | str substring 0..200)"
+    }
+    # A resumable branch (exists, carries commits beyond origin/main) is
+    # KEPT — a prior land may have committed already and died later; a
+    # fresh branch is cut from origin/main, never the possibly-stale
+    # local main. NEVER reset: a dirty tree rides along or the checkout
+    # refuses loudly (the header's wipe lesson).
+    let has_branch = (do { git rev-parse --verify $"refs/heads/($branch)" --quiet } | complete).exit_code == 0
+    let ahead_raw = (if $has_branch {
+        (do { git log $"origin/main..($branch)" --oneline } | complete)
+    } else {
+        {exit_code: 1, stdout: '', stderr: ''}
+    })
+    let resuming = ($has_branch and $ahead_raw.exit_code == 0 and (($ahead_raw.stdout | str trim) != ''))
+    if $resuming {
+        let count = (($ahead_raw.stdout | lines | length) | into string)
+        print $"land: resuming ($branch) with ($count) commit\(s\) beyond origin/main"
+        let co = (do { git checkout $branch --quiet } | complete)
+        if $co.exit_code != 0 {
+            fail $"land: back to the branch: ($co.stderr | str trim | str substring 0..200)"
+        }
+    } else {
+        let sw = (do { git checkout -B $branch origin/main --quiet } | complete)
+        if $sw.exit_code != 0 {
+            fail $"land: branch from origin/main: ($sw.stderr | str trim | str substring 0..200) — local changes conflicting with the newer main must be rebased by hand; land never resets"
+        }
+    }
     # .fabro/workflows rides along: probe rigs are bench assets landing
     # through the same dance (fabro-70af probes 17-19, 2026-10-02).
     # Bench docs (FACETS.md, README.md, AGENTS.md) land the same way: the
@@ -26,18 +56,24 @@ def main [subject: string]: nothing -> nothing {
     # written-language rule (ADR-0033) is visible where the work happens.
     let add = (do { git add scripts/ justfile .fabro/workflows FACETS.md README.md AGENTS.md } | complete)
     if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
-    let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
-    if ($dirty | is-empty) {
-        # retry semantics: a prior land may have committed+pushed already and
-        # died on a transient GitHub 504 — continue when the branch carries
-        # commits beyond origin/main, refuse only when there is truly nothing
+    # STAGED, not porcelain: unrelated dirty or untracked files (a
+    # sibling agent's work — the roster rule) must neither block the
+    # retry nor ride along; land commits exactly what its add list
+    # staged.
+    let staged = (do { git diff --cached --name-only } | complete | get stdout | str trim)
+    if ($staged | is-empty) {
+        # retry semantics, now actually implemented: a prior land may
+        # have committed+pushed already and died on a transient GitHub
+        # 504 — continue when the branch carries commits beyond
+        # origin/main, refuse only when there is truly nothing
         let ahead = (do { git log origin/main..HEAD --oneline } | complete | get stdout | str trim)
         if ($ahead | is-empty) { fail 'land: nothing to commit — pass the edit BEFORE running land' }
+        let count = (($ahead | lines | length) | into string)
+        print $"land: nothing new to commit — continuing with the ($count) commit\(s\) already on the branch"
+    } else {
+        let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $subject --quiet } | complete)
+        if $cm.exit_code != 0 { fail $"land: commit: ($cm.stderr | str trim | str substring 0..200)" }
     }
-    let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $subject --quiet } | complete)
-    if $cm.exit_code != 0 { fail $"land: commit: ($cm.stderr | str trim | str substring 0..200)" }
-    let pf = (do { git fetch --prune origin --quiet } | complete)
-    if $pf.exit_code != 0 { fail $"land: fetch: ($pf.stderr | str trim | str substring 0..200)" }
     let push = (do { git push --force-with-lease origin $"($branch):($branch)" --quiet } | complete)
     if $push.exit_code != 0 { fail $"land: push: ($push.stderr | str trim | str substring 0..200)" }
     let existing = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state open --json number,url --limit 1 } | complete)
