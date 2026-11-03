@@ -1071,7 +1071,14 @@ def main [] {
     # closeout is fail-closed on the seeds CLI (seeds-e160): test-local's
     # buildpack image ships neither.
     ensure-sync
-    let mini = (do { ^$FABRO create mini --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
+    # The readiness refusal rides --force ONLY on request
+    # (FABRO_BENCH_FORCE=1): by default the bench shows a closed
+    # provider window / missing credential as the red it is. A
+    # bench-heavy evening's rate-limit circuit (a 429 reset window —
+    # the provider is fine, the quota is spent) would otherwise kill
+    # the run BEFORE the rows print, erasing the whole table's result.
+    let force_args = (if ($env.FABRO_BENCH_FORCE? | default '') == '1' { ['--force'] } else { [] })
+    let mini = (do { ^$FABRO create mini ...$force_args --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
     let mini_id = ($mini.stdout | from json | get -o run_id)
     # The integration run carries the same board marker (user directive
