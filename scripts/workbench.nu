@@ -154,6 +154,18 @@ const PROBES = [
     # Window note: every leg needs the fork.30 toolchain pin; until
     # then the probe fails loudly naming the skew (probe-35/37 class).
     [probe-39-adjudicator-reads succeeded]
+    # probe-40 (ADR-0039 stage E, denkhaus/work#1107): the merger's
+    # write door and the closing pass's verdict-flipped read over the
+    # run channel — the merge door REFUSES this probe's non-merger
+    # workflow with the allowlist teaching (the happy merge is the
+    # merger workflow's own pass, not a probe's), the settled-verdict
+    # queue read returns the record the closing pass parses, and the
+    # grammar legs refuse teaching (bogus verdict; pending is the
+    # default queue, never a filter).
+    # Window note: the merge verb and the verdict filter need the
+    # fork.30 toolchain pin; until then the probe fails loudly naming
+    # the skew (probe-35/37/39 class).
+    [probe-40-merger-doors succeeded]
 ]
 
 def auth-header []: nothing -> record {
