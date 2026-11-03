@@ -1,0 +1,18 @@
+digraph MergerDoorsProbe {
+    graph [
+        goal="The merger's write door and the closing pass's verdict-flipped read over the run channel (ADR-0039 stage E, denkhaus/work#1107): the merge door's non-merger refusal, the settled-verdict queue read's record shape",
+        default_max_retries=0,
+        stall_timeout="5m"
+    ]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    reader [
+        label="Reader: the merger doors",
+        shape=parallelogram,
+        script="nu .fabro/workflows/probe-40-merger-doors/scripts/probe.nu",
+        timeout="120s",
+        max_retries=0
+    ]
+    start -> reader
+    reader -> exit [label="Done"]
+}
