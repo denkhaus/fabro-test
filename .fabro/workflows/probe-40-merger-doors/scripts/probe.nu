@@ -52,7 +52,7 @@ def main []: nothing -> nothing {
         if ($parsed | get -o data) == null {
             fail $"the queue record lost its data key: ($queue.stdout | str trim | str substring 0..240)"
         }
-        print $"queue: ($parsed.data | length) run(s) settled on closable=enabled"
+        print $"queue: ($parsed.data | length) run\(s\) settled on closable=enabled"
     } else {
         fail $"the queue must print the record the closing pass parses: ($queue.stdout | str trim | str substring 0..240)"
     }
