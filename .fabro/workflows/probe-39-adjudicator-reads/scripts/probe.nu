@@ -76,7 +76,7 @@ def main []: nothing -> nothing {
         fail 'run queue through the channel failed (rc != 0)'
     }
     let queue_record = (record-of $queue.stdout 'data' 'run queue')
-    print $"queue: ($queue_record.data | length) run(s) queued on merge/develop"
+    print $"queue: ($queue_record.data | length) run\(s\) queued on merge/develop"
 
     # work#1113: every claimed entry carries the claim's project — queue
     # consumers read scoped doors with it, never a hardcoded project id.
