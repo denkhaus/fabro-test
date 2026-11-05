@@ -1,0 +1,11 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# probe-41 (work#1107 stage F): the watchdog's read doors over the run
+# channel from a real toolchain sandbox — the transport half of the
+# dead-man watch. The bench server carries no gear automations (they go
+# live at the fork.30 cutover), so absent reads disabled → healthy.
+[run.clone]
+depth = 1

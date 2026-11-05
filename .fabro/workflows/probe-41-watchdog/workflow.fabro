@@ -1,0 +1,27 @@
+digraph Probe41Watchdog {
+    graph [goal="The dead-man watch's read doors work from a run sandbox: every gear automation row and pass history reads green, absent gears stay silent", default_max_retries=0, stall_timeout="5m", max_node_visits=10]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    # The watchdog read-path probe (work#1107 stage F): the stall LOGIC
+    # is pinned by fabro's watchdog stall-check smoke (three arms); this
+    # probe drives the RISK the smoke cannot see — the run channel's
+    # authorization for `fabro automations list` and `fabro ps -a` from
+    # a run-scoped worker, in a real toolchain sandbox. The script is a
+    # faithful copy of the watchdog's reads (the probe-30 mirror
+    # precedent): absent gear automations read disabled → healthy →
+    # exit 0. A refused read exits 1 (fact-failure discipline) and the
+    # probe goes RED naming the transport.
+    reads [
+        label="Watchdog reads: automations + ps over the channel",
+        shape=parallelogram,
+        script="nu .fabro/workflows/probe-41-watchdog/scripts/watchdog-reads.nu",
+        timeout="4m",
+        max_retries=0
+    ]
+    start -> reads
+    reads -> exit [label="All gears healthy", condition="preferred_label=\"All gears healthy\""]
+    # A refused/broken read IS the probe's red arm: outcome=failed routes
+    # to exit and the run concludes failed.
+    reads -> exit [label="Read failed", condition="outcome=failed"]
+    reads -> exit [x.kind="soft", label="Unrouted read outcome"]
+}

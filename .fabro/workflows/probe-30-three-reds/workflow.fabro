@@ -28,9 +28,9 @@ digraph Probe30ThreeReds {
     # < 3 the circuit breaker (loop_restart_signature_limit=3) cuts the
     # third loop signature workflow_error before a >= 3 guard can fire
     # (first drive, run 01M636T77HA3QSKK4F6G93AQFV: two bounces then
-    # workflow_error at the third red). The bench asserts the run ends
-    # FAILED with reason=deadlock — the human exit — NOT workflow_error,
-    # NOT succeeded.
+    # workflow_error at the third red). Since work#1072 the bench asserts
+    # the run ends TERMINAL human_needed — the decision inbox, never a
+    # failure — NOT workflow_error, NOT succeeded.
     tester -> implementer [label="Gate red", condition="outcome=failed && nodes.tester.generation < 2"]
     tester -> exit [x.kind="deadlock", label="Gate deadlock (3 reds, needs a human)"]
     implementer -> tester [label="Re-test"]
