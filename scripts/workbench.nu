@@ -92,12 +92,16 @@ const PROBES = [
     # probe-29 (work#1054): the gate env-scrub idiom — the engine injects
     # FABRO_SERVER (channel mount), the gate's cargo tiers must not see it.
     [probe-29-gate-env-scrub succeeded]
-    # probe-30 (work#1057, restored fabro-6baf guard): the third
-    # consecutive gate red exits to the human as a DEADLOCK — the check
-    # arm asserts reason=deadlock, not workflow_error (the breaker
-    # cutting an unbounded bounce) and not succeeded (a plain gate-green
-    # exit beside the kind edge would leave the finish unclassified).
-    [probe-30-three-reds failed]
+    # probe-30 (work#1057, restored fabro-6baf guard; expectation FLIPPED
+    # by work#1072): the third consecutive gate red exits to the human as
+    # a DECISION REQUEST — the check arm asserts the terminal kind
+    # human_needed (the decision inbox), not failed+deadlock (the pre-#1072
+    # shape), not workflow_error (the breaker cutting an unbounded bounce),
+    # not succeeded (a plain gate-green exit beside the kind edge would
+    # leave the finish unclassified). RED until the fork.30 toolchain pin
+    # ships #1072 (rows 35/37/39/40 skew precedent): fork.29 still parks
+    # the run failed/deadlock.
+    [probe-30-three-reds human_needed]
     # probe-31 (work#1073, born from the 2026-10-30 loop lap): the
     # in-sandbox work CLI over the run channel — the exact evidence.nu
     # call shape. Asserts every link: env token + FABRO_SERVER, the
@@ -166,6 +170,13 @@ const PROBES = [
     # fork.30 toolchain pin; until then the probe fails loudly naming
     # the skew (probe-35/37/39 class).
     [probe-40-merger-doors succeeded]
+    # probe-41 (work#1107 stage F): the watchdog's read doors —
+    # `fabro automations list` + `fabro ps -a --workflow <gear>` over the
+    # run channel from a real toolchain sandbox. Absent gear automations
+    # read disabled (the pause is authoritative): silence is health. The
+    # stall LOGIC and alarm arm are pinned by fabro's
+    # watchdog/scripts/stall-check-smoke.nu (battery-registered).
+    [probe-41-watchdog succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -487,8 +498,8 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     # distinguishable on the board at a glance — the expect LABEL stays,
     # but titles are what the board shows. Admission-refused probes have
     # no run to title.
-    if ($run_id | is-not-empty) and ($expect in ['succeeded' 'failed']) {
-        let prefix = (if $expect == 'succeeded' { 'must-succeed' } else { 'must-fail' })
+    if ($run_id | is-not-empty) and ($expect in ['succeeded' 'failed' 'human_needed']) {
+        let prefix = (if $expect == 'succeeded' { 'must-succeed' } else if $expect == 'human_needed' { 'must-need-human' } else { 'must-fail' })
         let titled = (try {
             http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)" {title: $"($prefix): ($name)"}
         } catch {|err|
@@ -516,7 +527,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     let status = ($info | get -o status | default '?')
     let secs = ((((date now) - $t0) | into int) / 1_000_000_000)
 
-    let ok = if $expect == 'succeeded' { $status == 'succeeded' } else { $status == 'failed' }
+    let ok = if $expect == 'succeeded' { $status == 'succeeded' } else if $expect == 'human_needed' { $status == 'human_needed' } else { $status == 'failed' }
     let detail = if $ok { $"($status) in ($secs)s" } else { $"expected ($expect), got ($status)" }
 
     if $ok and $name == 'probe-04-runtools' {
@@ -536,9 +547,12 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
     }
     if $ok and $name == 'probe-30-three-reds' {
-        # work#1057: the third consecutive red must reach the HUMAN as a
-        # deadlock — reason=deadlock is the whole facet. The two failed
-        # shapes it discriminates: workflow_error (the breaker
+        # work#1057 (guard) + work#1072 (decision inbox): the third
+        # consecutive red must reach the HUMAN as a decision request —
+        # the terminal kind human_needed is the whole facet. The shapes
+        # it discriminates: failed/deadlock (the pre-#1072 parking —
+        # fork.29 servers still answer this way, the skew window),
+        # workflow_error (the breaker
         # loop_restart_signature_limit cutting the third loop signature
         # when the cap sat at generation < 3 — first drive, run
         # 01M636T77HA3QSKK4F6G93AQFV) and succeeded (a plain gate-green
@@ -546,9 +560,9 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         # sole_exit_route — second drive, run
         # 01M63706VG9110QPCB8PB4TJXS).
         let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
-        let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
-        let deadlocked = ($reason | str contains 'deadlock')
-        return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+        let kind = ($api | get -o lifecycle | get -o status | get -o kind | default '')
+        let needed = ($kind == 'human_needed')
+        return {facet: $name, ok: $needed, detail: ($detail + ' kind=' + $kind) }
     }
     if $ok and $name == 'probe-32-observation-record' {
         # ADR-0038 stage 1: the tool call, the platform record, AND the
