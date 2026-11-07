@@ -996,7 +996,8 @@ def seed-ensure []: nothing -> nothing {
     # (gh pr view <branch> also returns CLOSED pull requests — merging one
     # always fails with 'Base branch was modified')
     let existing = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state open --json number,url --limit 1 } | complete)
-    let open_prs = if $existing.exit_code == 0 { $existing.stdout | from json } else { [] }
+    let parsed998 = if $existing.exit_code == 0 { try { let parsed = ($existing.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] } } else { [] }
+    let open_prs = $parsed998
     let pr_url = if ($open_prs | is-not-empty) {
         $open_prs | first | get url
     } else {
@@ -1156,7 +1157,7 @@ def main [] {
         mut engine_pr = null
         for _ in 1..6 {
             let lst = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number,author --limit 1 } | complete)
-            let hits = (try { $lst.stdout | from json } catch { [] })
+            let hits = (try { let parsed = ($lst.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] })
             if ($hits | length) > 0 {
                 $engine_pr = ($hits | first)
                 break
@@ -1205,7 +1206,7 @@ def main [] {
         # PRs #95/#96 cascading). Close the mini's open PR on the way
         # out; the branch stays as evidence.
         let open = (do { ^gh pr list -R denkhaus/fabro-test --head $"fabro/run/($mini_id)" --state open --json number --limit 1 } | complete)
-        let hits = (try { $open.stdout | from json } catch { [] })
+        let hits = (try { let parsed = ($open.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] })
         if ($hits | length) > 0 {
             let num = ($hits | first | get number)
             let _ = (do { ^gh pr close $num -R denkhaus/fabro-test --comment 'bench hygiene: red bench closes its mini PR so backpressureOpenPrCap does not refuse the next publish (work#1049)' } | complete)
