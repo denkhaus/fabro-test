@@ -20,6 +20,11 @@
 
 const RECORD_KEYS = ['data']
 
+def fail [what: string]: nothing -> nothing {
+    print -e $"merger-doors-probe: ($what)"
+    exit 1
+}
+
 def door [argv: list<string>]: nothing -> any {
     let bin = ($env.FABRO_BIN? | default 'fabro')
     (do { ^$bin ...$argv } | complete)

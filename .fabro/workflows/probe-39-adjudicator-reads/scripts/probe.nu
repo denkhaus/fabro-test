@@ -85,7 +85,7 @@ def main []: nothing -> nothing {
     if ($projectless | length) > 0 {
         fail $"claimed queue entries must carry the claim's project (work#1113): ($projectless | to json -r)"
     }
-    print $"queue: ($claimed | length) claimed entr(y|ies) carry the claim's project"
+    print $"queue: ($claimed | length) claimed entr\(y\|ies\) carry the claim's project"
 
     # grammar: a bogus field refuses teaching the two fields
     let refused = (door ['run' 'queue' '--field' 'bogus' '--json' '--server' $sock])
