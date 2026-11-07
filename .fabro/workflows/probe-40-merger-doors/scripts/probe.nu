@@ -37,7 +37,7 @@ def main []: nothing -> nothing {
     # 1. the merge door's authz refusal for a non-merger workflow run
     #    (this probe). The target run id is syntactically valid; the
     #    door refuses on the WORKFLOW allowlist before anything else.
-    let merge = (door [run 'merge' '01M5844J1FDDPROBE000000000' '--server' $sock])
+    let merge = (door [run 'merge' '01M5844J1FDDPR0BE000000000' '--server' $sock])
     if $merge.exit_code == 0 {
         fail 'a non-merger workflow run must NOT merge — the door refused nothing'
     }

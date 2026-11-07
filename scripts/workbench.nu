@@ -22,7 +22,8 @@ def assert-local-server []: nothing -> nothing {
 }
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
-# Probe registry: default expectation per workflow (probe-06/09 expect failure).
+# Probe registry: default expectation per workflow (probe-06 expects the
+# human_needed parking of its guard kill, probe-09 expects failure).
 const PROBES = [
     [name expect];
     [probe-01-schema succeeded]
@@ -30,7 +31,7 @@ const PROBES = [
     [probe-03-tools succeeded]
     [probe-04-runtools succeeded]
     [probe-05-hooks succeeded]
-    [probe-06-guards failed]
+    [probe-06-guards human_needed]
     [probe-07-artifacts succeeded]
     [probe-08-interview succeeded]
     [probe-09-envelope-deny failed]
@@ -541,10 +542,15 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         return {facet: $name, ok: ($collected > 0), detail: ($detail + $" | artifact.collected=($collected)") }
     }
     if $ok and $name == 'probe-06-guards' {
+        # work#1072 (decision inbox): the permanently-failing loop's guard
+        # kill parks in the human_needed decision column, never
+        # Failed{Deadlock} — the parking IS the facet, the same
+        # classification the fork classifier gives the deadlock-exit
+        # family (the probe-30 precedent).
         let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
-        let reason = ($api | get -o lifecycle | get -o status | get -o reason | default '' | str lowercase)
-        let deadlocked = ($reason | str contains 'deadlock')
-        return {facet: $name, ok: $deadlocked, detail: ($detail + ' reason=' + $reason) }
+        let kind = ($api | get -o lifecycle | get -o status | get -o kind | default '')
+        let needed = ($kind == 'human_needed')
+        return {facet: $name, ok: $needed, detail: ($detail + ' kind=' + $kind) }
     }
     if $ok and $name == 'probe-30-three-reds' {
         # work#1057 (guard) + work#1072 (decision inbox): the third

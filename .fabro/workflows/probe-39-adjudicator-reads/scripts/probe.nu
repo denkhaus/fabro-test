@@ -102,7 +102,7 @@ def main []: nothing -> nothing {
         fail 'observation list through the channel failed (rc != 0)'
     }
     let facts_record = (record-of $facts.stdout 'observations' 'observation list')
-    print $"facts: ($facts_record.observations | length) observation record(s) on this run"
+    print $"facts: ($facts_record.observations | length) observation record\(s\) on this run"
 
     # grammar: a non-run-id refuses naming the run id
     let bad_rid = (door ['observation' '--server' $sock 'list' '--run-id' 'nope' '--json'])
@@ -132,7 +132,7 @@ def main []: nothing -> nothing {
         fail $"work radius through the channel failed for ($key) (rc != 0)"
     }
     let radius_record = (record-of $radius.stdout 'radius' 'work radius')
-    print $"radius: ($key) holds ($radius_record.radius | length) open item(s)"
+    print $"radius: ($key) holds ($radius_record.radius | length) open item\(s\)"
 
     # 4. the answer channel (a parked run's fork travels back here)
     let comments = (door ['work' '--server' $sock 'comments' '--project' $SCOPED_PROJECT $key '--json'])
@@ -141,7 +141,7 @@ def main []: nothing -> nothing {
         fail $"work comments through the channel failed for ($key) (rc != 0)"
     }
     let comments_record = (record-of $comments.stdout 'comments' 'work comments')
-    print $"comments: ($comments_record.comments | length) comment(s) on ($key)"
+    print $"comments: ($comments_record.comments | length) comment\(s\) on ($key)"
 
     print 'adjudicator-reads-probe: all four doors green'
 }
