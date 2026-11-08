@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 # One mini integration run: create -> start -> wait. Prints the terminal JSON.
 # Usage: nu scripts/run-mini.nu [--goal 'text']
-def main [goal: string = '', --environment: string = 'test-local'] {
+def main [goal: string = '', --environment: string = 'toolchain'] {
     let server = ($env.FABRO_SERVER? | default 'http://127.0.0.1:32276')
     let fabro = ($env.FABRO_BIN? | default ('~/.fabro/bin/fabro' | path expand))
 
