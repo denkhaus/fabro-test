@@ -292,7 +292,7 @@ def platform-checks []: nothing -> list<record> {
     # design (non-local FABRO_SERVER is refused), so docker exec is the
     # honest reader of what the image actually carries.
     let container_nu = (do { ^docker exec fabro-lokal nu --version } | complete)
-    let harness_nu = (version)
+    let harness_nu = (version | get -o version | default '')
     $rows = ($rows | append {
         facet:  'P1 server container nu matches the harness pin'
         ok:     (($container_nu.exit_code == 0) and (($container_nu.stdout | str trim) == $harness_nu))
@@ -791,9 +791,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
             | get -o observations | default []
             | where {|o| $o.seq == $seq}
             | first | get -o linked_work_items | default [])
-        let wire_ok = (($joined | length) == 1)
-            and (($joined | first | get -o item_key | default '') == $blocker_key)
-            and (($joined | first | get -o item_state | default '') == 'open')
+        let wire_ok = ((($joined | length) == 1) and (($joined | first | get -o item_key | default '') == $blocker_key) and (($joined | first | get -o item_state | default '') == 'open'))
         # arm 2 — the same pair dedupes: already_linked, still one row
         let link2 = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
             itemKey: $blocker_key,
@@ -810,8 +808,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
             itemKey: $closer_key,
             reason: $"probe-42 ($tag): the live link must block the unforced close"
         })
-        let refused = (($refusal | get -o errors) != null)
-            and (($refusal | get -o errors | default [] | first | get -o detail | default '') | str contains $blocker_key)
+        let refused = ((($refusal | get -o errors) != null) and (($refusal | get -o errors | default [] | first | get -o detail | default '') | str contains $blocker_key))
         # arm 4 — unlink: the wire empties, the unforced close goes through
         let unlink = (http post --headers (auth-header) -t 'application/json' $"($items_url)/unlink" {
             itemKey: $blocker_key,
