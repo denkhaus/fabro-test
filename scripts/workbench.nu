@@ -1274,7 +1274,11 @@ def main [] {
         # this rework replaces; the bridge exiting 1 over "Pull request
         # already exists" was the bench's bug, not the platform's).
         let branch = $"fabro/run/($mini_id)"
-        mut engine_pr = null
+        # nu 0.116 tightened mut type inference: a bare null init types the
+        # variable nothing and a later record assignment is a type error
+        # (the first mini leg under the 0.116.1 pin died here). The any
+        # annotation keeps the null-sentinel pattern.
+        mut engine_pr: any = null
         for _ in 1..6 {
             let lst = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number,author --limit 1 } | complete)
             let hits = (try { let parsed = ($lst.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] })
