@@ -178,6 +178,15 @@ const PROBES = [
     # stall LOGIC and alarm arm are pinned by fabro's
     # watchdog/scripts/stall-check-smoke.nu (battery-registered).
     [probe-41-watchdog succeeded]
+    # probe-42 (ADR-0038 stage 3, denkhaus/work#1082, the fork.32
+    # observation batch): the link LIFECYCLE on the wire — the half
+    # probe-34 leaves uncovered. The reverse join (linked_work_items
+    # on the observation list) could silently serve [] forever with
+    # no bench noticing (exactly the gap the fork.32 mock fix exposed
+    # on 2026-11-09); the dedupe at the edge and the unlink arm (the
+    # radius reads the LIVE table — an unlinked radius closes
+    # unforced) ride the same chain.
+    [probe-42-observation-links succeeded]
 ]
 
 def auth-header []: nothing -> record {
@@ -273,6 +282,22 @@ def platform-checks []: nothing -> list<record> {
     let tcenv = (http get --headers (auth-header) $"((server))/api/v1/environments/toolchain" | get -o env | default {})
     let injected = (($tcenv | get -o GIT_CONFIG_KEY_0 | default '') == 'safe.directory') and (($tcenv | get -o GIT_CONFIG_VALUE_0 | default '') == '*') and (($tcenv | get -o GIT_CONFIG_COUNT | default '') == '1')
     $rows = ($rows | append {facet: 'P1 toolchain env injects git safe.directory', ok: $injected, detail: ($tcenv | to json -r)})
+    # The server image vendors nu for host-side hooks (fabro-8e13), and
+    # that nu must stay in lockstep with the harness pin: a vendored nu
+    # older than the scripts the line authors moves the mx-e606d5
+    # parse-break class INTO the shipped artifact. Both halves lagged at
+    # 0.115.0 on 2026-11-09 (fabro-test's mise pin and fabro-dev's
+    # NU_VERSION), each caught by hand during the deploy window — this
+    # row makes the drift mechanical. The stack is local by bench
+    # design (non-local FABRO_SERVER is refused), so docker exec is the
+    # honest reader of what the image actually carries.
+    let container_nu = (do { ^docker exec fabro-lokal nu --version } | complete)
+    let harness_nu = (version)
+    $rows = ($rows | append {
+        facet:  'P1 server container nu matches the harness pin'
+        ok:     (($container_nu.exit_code == 0) and (($container_nu.stdout | str trim) == $harness_nu))
+        detail: $"container=(($container_nu.stdout | str trim)) harness=($harness_nu) exit=(($container_nu.exit_code))"
+    })
     let index = (http get $"((server))/" | str contains '<html')
     $rows = ($rows | append {facet: 'P2 SPA index', ok: $index, detail: ''})
 
@@ -714,6 +739,104 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let branch_state = (if $unpublished { 'none' } else { 'pushed' })
         return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) branch=($branch_state) reason=($reason)")}
     }
+    if $ok and $name == 'probe-42-observation-links' {
+        # ADR-0038 stage 3, the fork.32 batch's uncovered half: the link
+        # LIFECYCLE. probe-34 proves link+close-gate; here the REVERSE
+        # JOIN serves the link on the observation list (item_key and the
+        # live item_state), the second link of the same pair DEDUPES
+        # (already_linked, still one row), and after UNLINK the wire is
+        # empty and the unforced close goes through — the radius reads
+        # the live table, not a snapshot. Pure HTTP against the stack.
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let stages = ($state | get -o stages | default {})
+        let stage_key = ($stages | columns | where {|k| $k | str starts-with 'recorder'} | first)
+        let observations = ($stages | get -o $stage_key | default {} | get -o observations | default [])
+        let seq = ($observations | first | get -o seq | default 0)
+        let text_ok = (($observations | first | get -o text | default '') == 'probe-42 link lifecycle observation')
+        let project = 'fabro-proof'
+        let tag = (date now | format date '%m%d-%H%M%S')
+        let items_url = $"((server))/api/v1/projects/($project)/work-items"
+        let closer = (http post --headers (auth-header) -t 'application/json' $items_url {
+            title: $"probe-42 closer ($tag)",
+            body: $"probe-42 closer body ($tag)",
+            labels: [$"bench=($tag)"]
+        })
+        let blocker = (http post --headers (auth-header) -t 'application/json' $items_url {
+            title: $"probe-42 blocker ($tag)",
+            body: $"probe-42 blocker body ($tag)",
+            labels: [$"bench=($tag)"]
+        })
+        let closer_key = ($closer | get -o itemKey | default '')
+        let blocker_key = ($blocker | get -o itemKey | default '')
+        let setup_ok = ($text_ok and ($seq > 0) and (not ($closer_key | is-empty)) and (not ($blocker_key | is-empty)))
+        if not $setup_ok {
+            return {facet: $name, ok: false, detail: ($detail + $" | setup: text=($text_ok) seq=($seq) closer=($closer_key) blocker=($blocker_key)") }
+        }
+        # the claims-history edge: the close verb works a claimed item
+        let grant = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/projects/($project)/claims" {
+            itemKey: $closer_key,
+            runId: $run_id,
+            lane: 'loop'
+        })
+        let granted = (($grant | get -o outcome | default '') in ['granted' 'already_held'])
+        # arm 1 — link, then the reverse join serves exactly the blocker
+        let list_url = $"((server))/api/v1/runs/($run_id)/observations"
+        let link1 = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
+            itemKey: $blocker_key,
+            runId: $run_id,
+            seq: $seq
+        })
+        let linked = (($link1 | get -o outcome | default '') == 'linked')
+        let joined = (http get --headers (auth-header) $list_url
+            | get -o observations | default []
+            | where {|o| $o.seq == $seq}
+            | first | get -o linked_work_items | default [])
+        let wire_ok = (($joined | length) == 1)
+            and (($joined | first | get -o item_key | default '') == $blocker_key)
+            and (($joined | first | get -o item_state | default '') == 'open')
+        # arm 2 — the same pair dedupes: already_linked, still one row
+        let link2 = (http post --headers (auth-header) -t 'application/json' $"($items_url)/link" {
+            itemKey: $blocker_key,
+            runId: $run_id,
+            seq: $seq
+        })
+        let deduped = (($link2 | get -o outcome | default '') == 'already_linked')
+        let still_one = (((http get --headers (auth-header) $list_url
+            | get -o observations | default []
+            | where {|o| $o.seq == $seq}
+            | first | get -o linked_work_items | default []) | length) == 1)
+        # arm 3 — the live link blocks the unforced close
+        let refusal = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $closer_key,
+            reason: $"probe-42 ($tag): the live link must block the unforced close"
+        })
+        let refused = (($refusal | get -o errors) != null)
+            and (($refusal | get -o errors | default [] | first | get -o detail | default '') | str contains $blocker_key)
+        # arm 4 — unlink: the wire empties, the unforced close goes through
+        let unlink = (http post --headers (auth-header) -t 'application/json' $"($items_url)/unlink" {
+            itemKey: $blocker_key,
+            runId: $run_id,
+            seq: $seq
+        })
+        let unlinked = ($unlink | get -o removed | default false)
+        let wire_empty = (((http get --headers (auth-header) $list_url
+            | get -o observations | default []
+            | where {|o| $o.seq == $seq}
+            | first | get -o linked_work_items | default []) | length) == 0)
+        let free_close = (http post --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $closer_key,
+            reason: $"probe-42 ($tag): unlinked radius closes unforced"
+        })
+        let closed_ok = (($free_close | get -o item | get -o state | default '') == 'closed')
+        # cleanup: the blocker closes on its empty radius
+        let _ = (http post -e --headers (auth-header) -t 'application/json' $"($items_url)/close" {
+            itemKey: $blocker_key,
+            reason: $"probe-42 ($tag): bench cleanup"
+        })
+        let ok42 = ($granted and $linked and $wire_ok and $deduped and $still_one and $refused and $unlinked and $wire_empty and $closed_ok)
+        return {facet: $name, ok: $ok42, detail: ($detail + $" | granted=($granted) linked=($linked) wire=($wire_ok) dedupe=($deduped and $still_one) refused=($refused) unlinked=($unlinked) wire_empty=($wire_empty) unforced_close=($closed_ok) seq=($seq)") }
+    }
+
     if $ok and $name == 'probe-37-observation-cli' {
         # ADR-0039 stage C: the script-stage door's landing — the record
         # on the stream with the exact payload, and the FOLD onto the
