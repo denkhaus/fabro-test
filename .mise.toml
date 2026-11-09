@@ -1,7 +1,7 @@
 [tools]
 # CI + fresh checkouts: the harness is pure nu (nushell-pro). The seeds
 # tracker CLI comes from dev hosts' global mise / the toolchain image.
-"aqua:nushell/nushell" = "0.115.0"
+"aqua:nushell/nushell" = "0.116.1"
 # lefthook pre-commit (betterleaks secrets scan) resolves via mise —
 # pinned locally so the hook works in fresh checkouts too.
 "aqua:betterleaks/betterleaks" = "1.8.1"
