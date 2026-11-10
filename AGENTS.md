@@ -29,3 +29,13 @@ mimo-flash prompt), and it is named as such.
 scripts/, justfile, .fabro/workflows, FACETS.md, README.md, AGENTS.md,
 opens or reuses the PR, waits for checks, squash-merges with --admin,
 resyncs main.
+
+## Probe staleness on contract changes
+
+Every change to a door's or authority's semantics (who may close, who
+may write, what a refusal means) MUST review the probes that assert
+the OLD contract — a green bench proves the probes, not the platform
+(probe-25 asserted the retired pre-ADR-0039 worker self-close for five
+days, 2026-11-03..10, reading the platform's correct teaching refusal
+as red). When a door changes, grep the probes for its tool names and
+re-decide each expectation in the same change.
