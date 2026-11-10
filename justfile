@@ -34,5 +34,9 @@ probes:
 
 # THE workbench: after every upstream merge. All probes + platform checks
 # + mini integration with publish. Red/green table; red -> exit 1.
+# Self-logging (2026-11-10, the recurring tail-capture lesson): the full
+# table and every probe line land in .workbench-last.log regardless of how
+# the caller captured stdout — a lost table cost a full 15-minute rerun
+# twice (fork.31, fork.33).
 workbench:
-    nu scripts/workbench.nu
+    nu scripts/workbench.nu | tee .workbench-last.log
