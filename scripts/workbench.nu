@@ -906,29 +906,37 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     if $ok and $name == 'probe-25-work-roundtrip' {
         # Work-item lifecycle roundtrip on a CLAIMED item (fabro-6041,
         # user direction 2026-10-25; rescued 2026-10-27 for the
-        # claim-binding core denkhaus/work#991: update/close refuse
-        # without a live claim held by the run, so the pre-#991
-        # create-first contract went red BY DESIGN). The bench ensured a
-        # p1 target item before the run; the agent claims it via
-        # fabro_work_next, then show, update, close. Counted on REAL
-        # pebble ToolCallCompleted events, never string greps across the
-        # whole stream; the item is found by its exact fixed title
-        # (newest closed match = this bench's item). This is the
-        # closeout agent's order of operations — fabro-9986's laps rely
-        # on it.
+        # claim-binding core: update refuses without a live claim held
+        # by the run). Since the close authority moved to the adjudicator
+        # alone (ADR-0039 stage E), a worker run's `fabro_work_close`
+        # MUST answer with the teaching refusal `close_not_adjudicator`
+        # — the bench=1110-143327 round reworked the probe for that
+        # contract (the old expectation asserted the retired worker
+        # self-close and read the platform's correct refusal as red).
+        # Counted on REAL pebble ToolCallCompleted events, never string
+        # greps across the whole stream; the item is found by its exact
+        # fixed title (newest open match = this bench's item).
         let evs = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/events?limit=2000" | get -o data | default [])
-        let calls = ($evs | where {|e|
+        let completed = ($evs | where {|e|
             let pe = (pebble-event $e)
-            (($pe | describe | str starts-with 'record') and ($pe.ToolCallCompleted? != null)
-                and (not ($pe.ToolCallCompleted?.is_error? | default false)))
+            (($pe | describe | str starts-with 'record') and ($pe.ToolCallCompleted? != null))
         })
-        let tools_ok = (['fabro_work_next' 'fabro_work_show' 'fabro_work_update' 'fabro_work_close'] | all {|t|
+        let calls = ($completed | where {|e| (not ((pebble-event $e) | get -o ToolCallCompleted | get -o is_error | default false))})
+        let tools_ok = (['fabro_work_next' 'fabro_work_show' 'fabro_work_update'] | all {|t|
             ($calls | where {|e| (((pebble-event $e) | get -o ToolCallCompleted | to json -r) | str contains $t)} | length) > 0
         })
-        let newest = (do { ^gh issue list --repo denkhaus/work --state closed --search '"probe-25 roundtrip item" in:title' --json number,body --jq 'sort_by(.number) | last | (.number | tostring) + " " + .body' } | complete | get stdout | str trim)
+        let close_refusal = ($completed | where {|e|
+            (((pebble-event $e) | get -o ToolCallCompleted | to json -r) | str contains 'fabro_work_close')
+        } | first)
+        let refusal_ok = (if ($close_refusal | is-not-empty) {
+            ((pebble-event $close_refusal) | get -o ToolCallCompleted | to json -r | str contains 'close_not_adjudicator')
+        } else {
+            false
+        })
+        let newest = (do { ^gh issue list --repo denkhaus/work --state open --search '"probe-25 roundtrip item" in:title' --json number,body --jq 'sort_by(.number) | last | (.number | tostring) + " " + .body' } | complete | get stdout | str trim)
         let state_ok = ($newest | str contains 'marker-create') and ($newest | str contains 'marker-update')
-        let roundtrip = $tools_ok and $state_ok
-        return {facet: $name, ok: $roundtrip, detail: ($detail + $" | lifecycle_calls=($calls | length) item#=($newest | split row ' ' | first) closed=($state_ok)") }
+        let roundtrip = $tools_ok and $refusal_ok and $state_ok
+        return {facet: $name, ok: $roundtrip, detail: ($detail + $" | lifecycle_calls=($calls | length) close_refused=($refusal_ok) item#=($newest | split row ' ' | first) markers=($state_ok)") }
     }
     {facet: $name, ok: $ok, detail: $detail}
 }
@@ -1045,6 +1053,24 @@ def proof-ensure []: nothing -> nothing {
 # does not race the sibling probe.
 def probe25-target-ensure []: nothing -> nothing {
     project-ensure
+    # Retire the previous rounds' items first: since the close authority
+    # moved to the adjudicator alone (ADR-0039 stage E), the probe's
+    # agent can no longer close what it claimed — open roundtrip items
+    # ACCUMULATE, and the picker granted a stale one instead of the
+    # fresh target (bench=1110-150155: agent held #1120, target #1250).
+    # The bench owns these items through gh; closing them here is the
+    # bench's own hygiene, not a run-tool close.
+    let stale = (do {
+        ^gh issue list --repo denkhaus/work --state open --search '"probe-25 roundtrip item" in:title' --json number --jq '.[].number'
+    } | complete)
+    if $stale.exit_code == 0 {
+        for num in ($stale.stdout | lines | where {|line| ($line | str trim) != '' }) {
+            let n = ($num | str trim)
+            if ($n | into int) > 0 {
+                let _ = (do { ^gh issue close $n --repo denkhaus/work --comment 'bench hygiene: retiring the roundtrip target before refiling (the agent-side close retired with the adjudicator close authority)' } | complete)
+            }
+        }
+    }
     let created = (do {
         ^gh issue create --repo denkhaus/work --title 'probe-25 roundtrip item' --body 'Roundtrip body: created by the bench probe. marker-create' --label 'project:fabro-proof' --label 'lane:proof' --label 'prio:p1'
     } | complete)
@@ -1293,7 +1319,12 @@ def main [] {
             let author = ($engine_pr | get -o author | get -o login | default '?')
             let view = (do { ^gh pr view $num -R denkhaus/fabro-test --json body --jq '.body' } | complete)
             let body_len = ($view.stdout | str trim | str length)
-            let app_ok = ($author == 'fabro-the-factory')
+            # gh returns GitHub-App author logins with the `app/` prefix
+            # in some builds (`app/fabro-the-factory`) and bare in others
+            # — normalize before the equality (the round-2 red of
+            # bench=1110-143327: the engine PR was healthy, the author
+            # string was not).
+            let app_ok = (($author | str replace -r '^app/' '') == 'fabro-the-factory')
             let prose_ok = ($body_len >= 120)
             $rows = ($rows | append {facet: '09 publish (engine)', ok: ($app_ok and $prose_ok), detail: $"PR #($num) by ($author), body=($body_len) chars"})
         } else {
