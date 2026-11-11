@@ -16,8 +16,11 @@ graph = "workflow.fabro"
 provider = "docker"
 
 [environments.toolchain.image]
+# git is required: the engine checkpoints stage work with git inside the
+# scope (fabro-checkpoint) — a scope without git dies at the first
+# checkpoint commit (first drive, run 01M74QT35HH1ZE8EKSX62KQYV0).
 dockerfile = """FROM alpine:3.19
-RUN echo environment-build-probe > /probe-built.txt
+RUN apk add --no-cache git && echo environment-build-probe > /probe-built.txt
 """
 
 # No `[run.environment]` here — the gears' pattern: the workbench's
