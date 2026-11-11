@@ -1,0 +1,27 @@
+digraph Probe43EnvBuild {
+    graph [
+        goal="The engine environment-build path: a run whose workflow declares an inline dockerfile cooks its own image and runs on it",
+        default_max_retries=0,
+        stall_timeout="5m"
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    // The assertion IS the scope: the stage runs inside the freshly
+    // cooked image (alpine + one RUN). If the build silently fell back
+    // to any preexisting image, /probe-built.txt is missing and this
+    // stage fails the run — that is the whole facet (the fork.33 cook
+    // failures were invisible to a green table because no probe drove
+    // this path).
+    marker [
+        label="Marker check: runs only on the built image",
+        shape=parallelogram,
+        script="sh -c 'test \"$(cat /probe-built.txt)\" = environment-build-probe'",
+        timeout="30s",
+        max_retries=0
+    ]
+
+    start -> marker [label="Go"]
+    marker -> exit [label="Built and verified"]
+}

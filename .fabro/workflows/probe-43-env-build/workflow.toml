@@ -1,0 +1,34 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+# The engine environment-build facet (denkhaus/work#1252): this probe
+# declares its OWN toolchain environment — provider docker, inline
+# dockerfile — so every run cooks an image at scope acquisition, at
+# bench scale. The layer rule makes the build declaration win over the
+# server catalog's finished image (the adjudicator gear's pattern), and
+# the workbench's `--environment toolchain` selects exactly this id.
+# The full toolchain cook stays a MANUAL slow lane (FACETS row 43): a
+# 30-40 min row would break the bench budget; the recipe is the
+# watchdog/develop gear fire on a scratch branch.
+[environments.toolchain]
+provider = "docker"
+
+[environments.toolchain.image]
+# git: the engine checkpoints stage work with git inside the scope
+# (fabro-checkpoint). bash: command stages execute through bash
+# (first-drive findings, runs 01M74QT35HH1ZE8EKSX62KQYV0 /
+# 01M74QXW7HFDCNZD5P6YQ14H3V). Both keep the cook at bench scale.
+dockerfile = """FROM alpine:3.19
+RUN apk add --no-cache git bash && echo environment-build-probe > /probe-built.txt
+"""
+
+# No `[run.environment]` here — the gears' pattern: the workbench's
+# `--environment toolchain` selects the id at launch (validation stays
+# standalone; the run create binds the repository the build needs).
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"

@@ -187,6 +187,15 @@ const PROBES = [
     # radius reads the LIVE table — an unlinked radius closes
     # unforced) ride the same chain.
     [probe-42-observation-links succeeded]
+    # probe-43 (denkhaus/work#1252): the engine environment-build path —
+    # the workflow declares its OWN toolchain environment (inline
+    # dockerfile, provider docker), so every run COOKS an image at scope
+    # acquisition at bench scale and the marker stage proves the scope
+    # runs on the built image. The fork.33 cook failures were invisible
+    # to a green table because no facet drove this path; a red here
+    # names the build (the enriched plugin error carries the cause
+    # chain and the daemon output tail since work#1253).
+    [probe-43-env-build succeeded]
 ]
 
 def auth-header []: nothing -> record {
