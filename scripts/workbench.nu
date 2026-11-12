@@ -196,6 +196,13 @@ const PROBES = [
     # names the build (the enriched plugin error carries the cause
     # chain and the daemon output tail since work#1253).
     [probe-43-env-build succeeded]
+    # probe-44 (denkhaus/work#1277, sprint 86): the placement-guard stop
+    # facet — a red guard with on_failure=exit ends the run failed AT
+    # the guard; the unconditional downstream edge never fires. The
+    # pre-fix shape (default `route` policy) ran the downstream stage
+    # after the red guard — the sprint-85 develop misfire, pinned red
+    # first in this repo before the attribute landed.
+    [probe-44-guard-stop failed]
 ]
 
 def auth-header []: nothing -> record {
@@ -603,6 +610,20 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let kind = ($api | get -o lifecycle | get -o status | get -o kind | default '')
         let needed = ($kind == 'human_needed')
         return {facet: $name, ok: $needed, detail: ($detail + ' kind=' + $kind) }
+    }
+    if $ok and $name == 'probe-44-guard-stop' {
+        # work#1277: the guard's red must STOP the run — the run ends
+        # failed (the expect facet above) AND the downstream stage never
+        # started. Under the pre-fix `route` policy the red guard took
+        # its unconditional edge and the downstream stage ran (the
+        # sprint-85 develop misfire); the stage table is the proof
+        # surface: a downstream row means the misroute is back.
+        let state = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)/state")
+        let keys = ($state | get -o stages | default {} | columns)
+        let guard_ran = ($keys | any {|k| $k | str starts-with 'guard'})
+        let downstream_ran = ($keys | any {|k| $k | str starts-with 'downstream'})
+        let ok44 = ($guard_ran and (not $downstream_ran))
+        return {facet: $name, ok: $ok44, detail: ($detail + $" | guard=($guard_ran) downstream=($downstream_ran)") }
     }
     if $ok and $name == 'probe-32-observation-record' {
         # ADR-0038 stage 1: the tool call, the platform record, AND the
