@@ -1,0 +1,32 @@
+digraph Probe44GuardStop {
+    graph [goal="A red placement guard stops the run: on_failure=exit ends it AT the guard, the unconditional downstream edge never fires (work#1277)", default_max_retries=0, stall_timeout="5m", max_node_visits=20]
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+    // The guarded class's shape: a POSIX sh guard whose only outbound
+    // edge is UNCONDITIONAL — under the default `route` policy a red
+    // guard takes that edge and the downstream stage runs (the sprint-85
+    // develop misfire, run killed manually). work#1277's fix is the
+    // node attribute below: `exit` skips the unconditional edge, the
+    // run ends failed at the guard.
+    guard [
+        label="Guard: always fails, stops the run",
+        shape=parallelogram,
+        script="sh -c 'exit 1'",
+        timeout="20s",
+        max_retries=0,
+        // work#1277's fix under test: `exit` skips the unconditional
+        // edge below — the run must end failed AT this guard and the
+        // downstream stage must never start.
+        on_failure="exit"
+    ]
+    downstream [
+        label="Downstream: must never run",
+        shape=parallelogram,
+        script="sh -c 'echo ran > probe44-downstream-ran'",
+        timeout="20s",
+        max_retries=0
+    ]
+    start -> guard
+    guard -> downstream
+    downstream -> exit
+}

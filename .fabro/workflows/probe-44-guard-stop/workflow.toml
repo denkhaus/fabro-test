@@ -1,0 +1,9 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.scm]
+provider = "github"
+owner = "denkhaus"
+repository = "fabro-test"
