@@ -516,9 +516,14 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     }
     # probe scripts execute nu in the sandbox — test-local (buildpack-deps)
     # ships no nushell; the toolchain env has nu via mise shims.
+    # probe-43 fires its OWN declared environment (work#1284, sprint 86):
+    # an id carries a catalog image XOR a declared build — the bench's
+    # "toolchain" id carries the registered cook image, probe-43's
+    # dockerfile declaration lives under probe43-build.
+    let env_id = (if $name == 'probe-43-env-build' { 'probe43-build' } else { 'toolchain' })
     # expect rides as a LABEL: a failed run in the list must be recognizable
     # as red-by-design from the outside (bench probes 06/09/15 fail on purpose)
-    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --label $"expect=($expect)" --environment toolchain --json --server (server) } | complete)
+    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --label $"expect=($expect)" --environment $env_id --json --server (server) } | complete)
     if $created.exit_code != 0 {
         let msg = ($created.stderr | str trim)
         # expect 'refused': admission must REJECT the graph and say why

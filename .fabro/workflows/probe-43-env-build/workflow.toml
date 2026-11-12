@@ -4,18 +4,23 @@ _version = 1
 graph = "workflow.fabro"
 
 # The engine environment-build facet (denkhaus/work#1252): this probe
-# declares its OWN toolchain environment — provider docker, inline
-# dockerfile — so every run cooks an image at scope acquisition, at
-# bench scale. The layer rule makes the build declaration win over the
-# server catalog's finished image (the adjudicator gear's pattern), and
-# the workbench's `--environment toolchain` selects exactly this id.
-# The full toolchain cook stays a MANUAL slow lane (FACETS row 43): a
-# 30-40 min row would break the bench budget; the recipe is the
-# watchdog/develop gear fire on a scratch branch.
-[environments.toolchain]
+# declares its OWN environment — provider docker, inline dockerfile —
+# so every run cooks an image at scope acquisition, at bench scale.
+# The declared id is probe43-BUILD, deliberately NOT "toolchain"
+# (sprint 86, work#1284): an environment id may carry EITHER a catalog
+# finished image OR a declared build, never both — the bench's
+# "toolchain" catalog entry carries the registered cook image for the
+# catalog-consuming probes (mini, the python/nu probes), and this
+# probe's fire selects probe43-build so its dockerfile declaration
+# compiles clean beside it. The layer rule (build declaration wins
+# over a finished image) still holds per id; the full toolchain cook
+# stays a MANUAL slow lane (FACETS row 43): a 30-40 min row would
+# break the bench budget; the recipe is the watchdog/develop gear fire
+# on a scratch branch.
+[environments.probe43-build]
 provider = "docker"
 
-[environments.toolchain.image]
+[environments.probe43-build.image]
 # git: the engine checkpoints stage work with git inside the scope
 # (fabro-checkpoint). bash: command stages execute through bash
 # (first-drive findings, runs 01M74QT35HH1ZE8EKSX62KQYV0 /
