@@ -1,11 +1,22 @@
 digraph retry_fix_lab {
     graph [goal="UI lab: a run blocked by a faulty workflow script, with real checkpoint work — for the fork/retry-on-new-tip semantics test (user session 2026-11-14)", default_max_retries=0, stall_timeout="5m"];
 
-    node [shape=box, style=rounded];
-    start [label="Start", script="print 'retry-fix-lab: start'"];
-    work [label="Work: make real changes", script="nu -c \"'retry-fix-lab work stage at (date now | format date %%Y-%%m-%%dT%%H:%%M:%%S)' | save --append RETRY-LAB.md; print 'work checkpoint written'\""];
-    check [label="Check: runs the faulty script", script="nu scripts/check.nu"];
-    exit [label="Exit", script="print 'retry-fix-lab: exit (unreachable until the fault is fixed)'"];
+    // parallelogram = command stage (runs without an LLM): the lab's
+    // stages are commands, not agent turns — the first draft's box
+    // nodes ran as agent stages and burned minutes routing around the
+    // very fault under test.
+    start [label="Start"];
+    work [
+        label="Work: make real changes",
+        shape=parallelogram,
+        script="nu -c \"'retry-fix-lab work stage at (date now | format date %Y-%m-%dT%H:%M:%S)' | save --append RETRY-LAB.md; print 'work checkpoint written'\""
+    ];
+    check [
+        label="Check: runs the faulty script",
+        shape=parallelogram,
+        script="nu scripts/check.nu"
+    ];
+    exit [shape=Msquare, label="Exit"];
 
     start -> work [label="continue"];
     work -> check [label="continue"];
