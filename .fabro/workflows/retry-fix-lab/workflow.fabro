@@ -8,8 +8,7 @@ digraph retry_fix_lab {
     start [label="Start"];
     work [
         label="Work: make real changes",
-        shape=parallelogram,
-        script="nu -c \"'retry-fix-lab work stage at (date now | format date %Y-%m-%dT%H:%M:%S)' | save --append RETRY-LAB.md; print 'work checkpoint written'\""
+        prompt="@prompts/work.md"
     ];
     check [
         label="Check: runs the faulty script",
