@@ -39,4 +39,4 @@ probes:
 # the caller captured stdout — a lost table cost a full 15-minute rerun
 # twice (fork.31, fork.33).
 workbench:
-    nu scripts/workbench.nu | tee .workbench-last.log
+    bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-last.log'
