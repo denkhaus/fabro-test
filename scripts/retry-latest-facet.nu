@@ -30,9 +30,15 @@ def facet-graph [check: string]: nothing -> string {
 
 # Register one specimen version; the id rides the API's answer.
 def facet-register-version [graph: string]: nothing -> string {
+    # The version bundle is SELF-CONTAINED: the environment Dockerfile
+    # rides INSIDE it (bundle-relative path — a ../../ escape is what
+    # the raw API rightly refuses; the CLI publish path resolves and
+    # embeds it the same way).
+    let dockerfile = (open --raw ../.fabro/Dockerfile)
     let files = {
         "workflow.fabro": $graph,
-        "workflow.toml": ("_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n\n[run.model]\nprovider = \"zai\"\nname = \"glm-4.7\"\n\n[environments.toolchain]\nprovider = \"docker\"\n\n[environments.toolchain.image]\ndockerfile = { path = \"../../Dockerfile\" }\n")
+        "workflow.toml": ("_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n\n[run.model]\nprovider = \"zai\"\nname = \"glm-4.7\"\n\n[environments.toolchain]\nprovider = \"docker\"\n\n[environments.toolchain.image]\ndockerfile = { path = \"Dockerfile\" }\n"),
+        "Dockerfile": $dockerfile,
     }
     let body = {
         entrypoint: "workflow.fabro",
