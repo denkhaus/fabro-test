@@ -23,8 +23,9 @@ def assert-local-server []: nothing -> nothing {
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
 # The retry-latest facet (work#1320): sourced for its drive fn — no
-# main here (sourcing a main-bearing file would run it).
-source scripts/retry-latest-facet.nu
+# main here (sourcing a main-bearing file would run it). The path is
+# file-relative (nu resolves source against the sourcing file's dir).
+source retry-latest-facet.nu
 
 # Probe registry: default expectation per workflow (probe-06 expects the
 # human_needed parking of its guard kill, probe-09 expects failure).
