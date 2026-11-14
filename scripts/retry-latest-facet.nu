@@ -20,7 +20,6 @@ def facet-graph [check: string]: nothing -> string {
     # workbench runs from.
     open --raw scripts/facet-graph-template.dot | str replace "__CHECK__" $check
 }
-}
 
 # Register one specimen version; the id rides the API's answer.
 def facet-register-version [graph: string]: nothing -> string {
