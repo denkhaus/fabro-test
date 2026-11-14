@@ -1,0 +1,25 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "zai"
+name = "glm-4.7"
+
+# The carry needs the source run's checkpoint commits ON origin: the
+# run branch pushes them (no PR — the specimen stays invisible to the
+# merger; retry-latest fetches fabro/run/<id> from origin).
+[run.run_branch]
+enabled = true
+push = true
+
+[environments.toolchain]
+provider = "docker"
+
+[environments.toolchain.image]
+# The dockerfile rides INLINE as a TOML literal block: run compile
+# rejects the { path } form ("persist-time inlining; this runner reads
+# no files here") — the CLI publish path inlines the same way before
+# registering a version.
+dockerfile = '''__DOCKERFILE__'''

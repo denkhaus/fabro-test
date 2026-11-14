@@ -27,11 +27,15 @@ def facet-register-version [graph: string]: nothing -> string {
     # rides INSIDE it (bundle-relative path — a ../../ escape is what
     # the raw API rightly refuses; the CLI publish path resolves and
     # embeds it the same way).
+    # The workflow.toml rides a plain file too (same lesson as the
+    # graph template), with the dockerfile inlined through the
+    # __DOCKERFILE__ placeholder as a TOML literal block — run compile
+    # rejects the { path } form, and no nu string parsing touches the
+    # TOML.
     let dockerfile = (open --raw .fabro/Dockerfile)
     let files = {
         "workflow.fabro": $graph,
-        "workflow.toml": ("_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n\n[run.model]\nprovider = \"zai\"\nname = \"glm-4.7\"\n\n[environments.toolchain]\nprovider = \"docker\"\n\n[environments.toolchain.image]\ndockerfile = { path = \"Dockerfile\" }\n"),
-        "Dockerfile": $dockerfile,
+        "workflow.toml": (open --raw scripts/facet-workflow-template.toml | str replace "__DOCKERFILE__" $dockerfile),
     }
     let body = {
         entrypoint: "workflow.fabro",
@@ -40,11 +44,21 @@ def facet-register-version [graph: string]: nothing -> string {
     }
     let res = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/workflow-versions" ($body | to json -r))
     # The answer names the registered id (versionId / id — take either).
-    let id = ($res | get -o versionId | default ($res | get -o id | default ($res | get -o data.versionId) | default ($res | get -o data.id)))
+    let id = ($res | get -o workflow_version_id | default ($res | get -o versionId) | default ($res | get -o id))
     if ($id | is-empty) {
         error make {msg: $"retry-latest facet: version registration answered no id: ($res | to json -r | str substring 0..200)"}
     }
     $id
+}
+
+# The run target pins the branch tip as the starting commit: the
+# retry-latest carry cherry-picks source_base..run-branch, and a run
+# whose intent named no sha has no base (the automation materializer
+# pins the same way at fire time).
+def facet-target []: nothing -> record {
+    let line = (^git ls-remote origin main | lines | first)
+    let tip = ($line | str substring 0..39)
+    {kind: "git", repo: "denkhaus/fabro-test", branch: "main", sha: $tip}
 }
 
 # Create a run from an explicit version (the intent path — no local
@@ -52,7 +66,7 @@ def facet-register-version [graph: string]: nothing -> string {
 def facet-run-from-version [version_id: string, label: string]: nothing -> string {
     let intent = {
         workflow_version_id: $version_id,
-        target: {kind: "none"},
+        target: (facet-target),
         environment_id: "toolchain",
         args: {labels: {bench: $label}}
     }
@@ -78,9 +92,12 @@ export def retry-latest-facet [bench_id: string]: nothing -> record {
         return {facet: 'probe-45-retry-latest', ok: false, detail: $"specimen expected failed, got ($failed_status)"}
     }
 
-    # v2: the fixed version, re-driven through the door.
+    # v2: the fixed version, re-driven through the door. The id rides
+    # EXPLICIT: the no-id resolution scans runs of the slug newest-first,
+    # and in the single-specimen world the failed source run IS the
+    # newest — the real user click relies on newer line runs existing.
     let fixed_id = (facet-register-version (facet-graph $CHECK_FIXED))
-    let res = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($failed_run)/retry-latest" '{}')
+    let res = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($failed_run)/retry-latest" ({workflow_version_id: $fixed_id} | to json -r))
     let new_run = ($res | get -o new_run_id | default ($res | get -o data.new_run_id))
     if ($new_run | is-empty) {
         return {facet: 'probe-45-retry-latest', ok: false, detail: $"retry-latest answered no successor: ($res | to json -r | str substring 0..200)"}
@@ -94,5 +111,5 @@ export def retry-latest-facet [bench_id: string]: nothing -> record {
     let _ = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/delete" $body)
 
     let ok = ($status == 'succeeded' and $carried >= 1)
-    {facet: 'probe-45-retry-latest', ok: $ok, detail: $"successor ($status), carried ($carried) commit(s)"}
+    {facet: 'probe-45-retry-latest', ok: $ok, detail: $"successor ($status), carried ($carried) commits"}
 }

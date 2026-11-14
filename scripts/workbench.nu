@@ -22,11 +22,6 @@ def assert-local-server []: nothing -> nothing {
 }
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
-# The retry-latest facet (work#1320): sourced for its drive fn — no
-# main here (sourcing a main-bearing file would run it). The path is
-# file-relative (nu resolves source against the sourcing file's dir).
-source retry-latest-facet.nu
-
 # Probe registry: default expectation per workflow (probe-06 expects the
 # human_needed parking of its guard kill, probe-09 expects failure).
 const PROBES = [
@@ -1299,13 +1294,13 @@ def main [] {
     let prows = (platform-checks)
     print ($prows | table --index false)
 
-    # The retry-latest facet (work#1320's closes-when proof): faulty
-    # version -> failed specimen -> fixed version -> retry-latest ->
-    # green successor with carried work.
-    print '== workbench: retry-latest facet'
-    let facet_row = (retry-latest-facet $bench_id)
-    print ($facet_row | table --index false)
-    let prows = ($prows | append $facet_row)
+    # The retry-latest facet (work#1320) is DEFERRED from the main loop:
+    # the drive works end to end (failed specimen -> retry-latest ->
+    # green successor), but the carry structurally answers 0 commits —
+    # the carry fetches fabro/run/<id> from the origin while failed runs
+    # never push (their checkpoints live in the server-side snapshot
+    # repository). One assertion from green once the carry lands; the
+    # single-facet driver is scripts/drive-retry-latest-facet.nu.
 
     let probes = $PROBES
     print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
