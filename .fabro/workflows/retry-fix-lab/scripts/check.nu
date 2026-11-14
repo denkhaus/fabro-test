@@ -11,9 +11,9 @@
 # execution: nu exits 1 loading the script.
 def main [] {
     print "check: opening the lab manifest"
-    # FIXED (the retry-lab experiment variable, 2026-11-14): the former
-    # parse-time fault (1 + "fault") is gone — fresh runs at this tip
-    # pass the check; retried/forked runs still pin the faulty version.
-    let fault = ("fault-fixed-on-main")
-    print $"check: the fault state reads ($fault)"
+    # The reloaded deliberate fault (matrix round 2, 2026-11-14): the
+    # path bug masked the original — parse-time type error again, now
+    # reached through the workspace-root-relative script path.
+    let fault = (2 + "fault-reloaded")
+    print $"check: unreachable, the fault evaluated to ($fault)"
 }
