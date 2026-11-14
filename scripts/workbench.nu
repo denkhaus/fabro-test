@@ -219,6 +219,15 @@ def fail [msg: string]: nothing -> nothing {
     exit 1
 }
 
+# Retire a confirmed expected park (user directive 2026-11-14): a green
+# human_needed facet proves the guard parked correctly — the spent probe
+# run leaves the board immediately instead of lingering until the next
+# round's clean-runs sweep. Red facets keep their run for diagnosis.
+def retire-park [run_id: string]: nothing -> nothing {
+    let body = ({ run_ids: [$run_id], force: true } | to json -r)
+    let _ = (http post --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/delete" $body)
+}
+
 # Kanban hygiene (user directive): the board shows ONLY this bench's runs.
 def clean-runs []: nothing -> nothing {
     mut rounds = 0
@@ -596,6 +605,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
         let kind = ($api | get -o lifecycle | get -o status | get -o kind | default '')
         let needed = ($kind == 'human_needed')
+        if $needed { retire-park $run_id }
         return {facet: $name, ok: $needed, detail: ($detail + ' kind=' + $kind) }
     }
     if $ok and $name == 'probe-30-three-reds' {
@@ -614,6 +624,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let api = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
         let kind = ($api | get -o lifecycle | get -o status | get -o kind | default '')
         let needed = ($kind == 'human_needed')
+        if $needed { retire-park $run_id }
         return {facet: $name, ok: $needed, detail: ($detail + ' kind=' + $kind) }
     }
     if $ok and $name == 'probe-44-guard-stop' {
