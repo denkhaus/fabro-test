@@ -17,14 +17,14 @@ def facet-graph [check: string]: nothing -> string {
     $"digraph retry_latest_facet {
     graph [goal=\"retry-latest facet specimen\", default_max_retries=0, stall_timeout=\"5m\"];
 
-    start [label='Start'];
-    work [label='Work', shape=parallelogram, script='echo facet-work-stage | tee -a FACET-RETRY.md'];
-    check [label='Check', shape=parallelogram, script='($check)'];
-    exit [shape=Msquare, label='Exit'];
+    start [label="Start"];
+    work [label="Work", shape=parallelogram, script="echo facet-work-stage | tee -a FACET-RETRY.md"];
+    check [label="Check", shape=parallelogram, script="($check)"];
+    exit [shape=Msquare, label="Exit"];
 
-    start -> work [label='continue'];
-    work -> check [label='continue'];
-    check -> exit [label='continue'];
+    start -> work [label="continue"];
+    work -> check [label="continue"];
+    check -> exit [label="continue"];
 }"
 }
 
