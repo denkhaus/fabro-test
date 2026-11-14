@@ -27,6 +27,20 @@ RUN apt-get update \
     | tar -xz --strip-components=1 -C /usr/local/bin "nu-0.116.1-${arch}-unknown-linux-musl/nu" \
  && nu --version
 
+# mulch (work#1070, ADR-0023 cutover): identical to the line's
+# Dockerfile.toolchain block — same version, same checksums.
+RUN set -eux; \
+    case "$(uname -m)" in \
+        x86_64) triple=x86_64-unknown-linux-musl; sha="${MULCH_SHA256_X86_64}";; \
+        aarch64) triple=aarch64-unknown-linux-musl; sha="${MULCH_SHA256_AARCH64}";; \
+        *) echo "unsupported arch $(uname -m)"; exit 1;; \
+    esac; \
+    curl -fsSL "https://github.com/denkhaus/mulch/releases/download/v${MULCH_VERSION}/mulch-${MULCH_VERSION}-${triple}.tar.gz" -o /tmp/mulch.tgz; \
+    echo "${sha}  /tmp/mulch.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/mulch.tgz -C /usr/local/bin mulch; \
+    chmod 0755 /usr/local/bin/mulch; \
+    rm /tmp/mulch.tgz; \
+    mulch --version
 # fabro CLI: the static musl release binary (the host-release artifact),
 # exactly the production client for the stack the bench drives against.
 RUN set -eux; \
@@ -43,18 +57,4 @@ RUN set -eux; \
     rm /tmp/fabro.tgz; \
     fabro --version
 
-# mulch (work#1070, ADR-0023 cutover): identical to the line's
-# Dockerfile.toolchain block — same version, same checksums.
-RUN set -eux; \
-    case "$(uname -m)" in \
-        x86_64) triple=x86_64-unknown-linux-musl; sha="${MULCH_SHA256_X86_64}";; \
-        aarch64) triple=aarch64-unknown-linux-musl; sha="${MULCH_SHA256_AARCH64}";; \
-        *) echo "unsupported arch $(uname -m)"; exit 1;; \
-    esac; \
-    curl -fsSL "https://github.com/denkhaus/mulch/releases/download/v${MULCH_VERSION}/mulch-${MULCH_VERSION}-${triple}.tar.gz" -o /tmp/mulch.tgz; \
-    echo "${sha}  /tmp/mulch.tgz" | sha256sum -c -; \
-    tar -xzf /tmp/mulch.tgz -C /usr/local/bin mulch; \
-    chmod 0755 /usr/local/bin/mulch; \
-    rm /tmp/mulch.tgz; \
-    mulch --version
 WORKDIR /workspace
