@@ -14,23 +14,11 @@ const CHECK_FIXED = "echo check-green"
 # The specimen graph: work makes a real change (the carried commit),
 # check is the fault carrier. Parallelogram = command stages.
 def facet-graph [check: string]: nothing -> string {
-    # Raw string: everything literal (no nu escaping games with the
-    # DOT quotes — the lesson of four rounds); the check rides a
-    # placeholder replaced in.
-    let template = r#"digraph retry_latest_facet {
-    graph [goal="retry-latest facet specimen", default_max_retries=0, stall_timeout="5m"];
-
-    start [label="Start"];
-    work [label="Work", shape=parallelogram, script="echo facet-work-stage | tee -a FACET-RETRY.md"];
-    check [label="Check", shape=parallelogram, script="__CHECK__"];
-    exit [shape=Msquare, label="Exit"];
-
-    start -> work [label="continue"];
-    work -> check [label="continue"];
-    check -> exit [label="continue"];
-}"#
+    # Backtick raw string (nu's raw form — single line, everything
+    # literal): the DOT parses fine without newlines; the check
+    rides a placeholder replaced in.
+    let template = `digraph retry_latest_facet { graph [goal="retry-latest facet specimen", default_max_retries=0, stall_timeout="5m"]; start [label="Start"]; work [label="Work", shape=parallelogram, script="echo facet-work-stage | tee -a FACET-RETRY.md"]; check [label="Check", shape=parallelogram, script="__CHECK__"]; exit [shape=Msquare, label="Exit"]; start -> work [label="continue"]; work -> check [label="continue"]; check -> exit [label="continue"]; }`
     $template | str replace "__CHECK__" $check
-}
 }
 
 # Register one specimen version; the id rides the API's answer.
