@@ -8,8 +8,8 @@
 # error in v1, fixed in v2).
 
 # The faulty and fixed check scripts (the experiment variable).
-const CHECK_FAULTY = "nu -c \"1 + 'fault'\""
-const CHECK_FIXED = "nu -c \"print 'check green'\""
+const CHECK_FAULTY = "exit 1"
+const CHECK_FIXED = "echo check-green"
 
 # The specimen graph: work makes a real change (the carried commit),
 # check is the fault carrier. Parallelogram = command stages.
@@ -18,7 +18,7 @@ def facet-graph [check: string]: nothing -> string {
     graph [goal=\"retry-latest facet specimen\", default_max_retries=0, stall_timeout=\"5m\"];
 
     start [label='Start'];
-    work [label='Work', shape=parallelogram, script='nu -c "facet work stage" | save --append FACET-RETRY.md'];
+    work [label='Work', shape=parallelogram, script='echo facet-work-stage | tee -a FACET-RETRY.md'];
     check [label='Check', shape=parallelogram, script='($check)'];
     exit [shape=Msquare, label='Exit'];
 
