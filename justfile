@@ -40,3 +40,7 @@ probes:
 # twice (fork.31, fork.33).
 workbench:
     bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-last.log'
+
+# The deliberate full bench (the compositional guard's explicit door).
+bench-full:
+    FULL_BENCH=1 nu scripts/workbench.nu | tee .workbench-last.log
