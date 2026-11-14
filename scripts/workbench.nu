@@ -1262,7 +1262,31 @@ def "main probe" [name: string, --expect: string]: nothing -> nothing {
     }
 }
 
+# COMPOSITIONAL GATE GUARD (user decision 2026-11-14, after the tenth
+# reflex violation): the full bench is a WINDOW GATE, never a
+# verification tool. A rerun within 60 minutes of the last full round
+# is refused unless the caller names the exception (FULL_BENCH=1, the
+# just bench-full recipe) — the teaching text names the facet drivers.
+def compositional-guard []: nothing -> nothing {
+    if ($env.FULL_BENCH? | default '') == '1' { return }
+    let log = '.workbench-last.log'
+    if not ($log | path exists) { return }
+    let age = ((date now) - (ls $log | get 0.modified))
+    if ($age < 60min) {
+        print -e $"╔══ COMPOSITIONAL GATE ══╗"
+        print -e $"The last full bench ran ($age | format duration min) ago. The full bench is a"
+        print -e $"window gate, never a verification tool — after a targeted fix, drive THE"
+        print -e "facet:  just probe NAME            (table probes)"
+        print -e "        nu scripts/drive-facet.nu   (facet drivers)"
+        print -e $"This window's evidence table stays valid for every untouched facet."
+        print -e $"A deliberate full round: just bench-full"
+        exit 3
+    }
+}
+
 def main [] {
+    compositional-guard
+
     assert-local-server
     clean-runs
     let bench_id = (date now | format date '%m%d-%H%M%S')
