@@ -2,7 +2,7 @@
 # One-shot board cleanup: delete the stranded specimen runs a crashed
 # retry-latest drive left behind (the facet deletes its runs only on
 # its success path).
-def server []: nothing -> string { 'http://127.0.0.1:32276' }
+def server []: nothing -> string { $env.FABRO_SERVER? | default 'http://127.0.0.1:32276' }
 
 def auth-header []: nothing -> record {
     let s = (open ~/.fabro/auth.json | get servers | get -o (server))
