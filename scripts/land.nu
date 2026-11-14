@@ -54,7 +54,7 @@ def main [subject: string]: nothing -> nothing {
     # Bench docs (FACETS.md, README.md, AGENTS.md) land the same way: the
     # catalog row and the probe that proves it are one change, and the
     # written-language rule (ADR-0033) is visible where the work happens.
-    let add = (do { git add scripts/ justfile .fabro/workflows FACETS.md README.md AGENTS.md } | complete)
+    let add = (do { git add scripts/ justfile .fabro/Dockerfile .fabro/workflows FACETS.md README.md AGENTS.md } | complete)
     if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
     # STAGED, not porcelain: unrelated dirty or untracked files (a
     # sibling agent's work — the roster rule) must neither block the
