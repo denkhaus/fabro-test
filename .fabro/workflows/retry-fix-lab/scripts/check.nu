@@ -5,11 +5,15 @@
 # later creates a NEW version and never reaches a retried or forked run
 # under the current semantics. That is the gap this lab demonstrates.
 #
-# The fault is a RUNTIME error (not parse-time) so admission accepts the
-# workflow and the stage fails in execution.
+# The fault is PARSE-time (nu 0.116.1 rejects int + string literals
+# with operator_incompatible_types while parsing the file — proven by
+# the lap-2 agent journal, 2026-11-14), which still fires at stage
+# execution: nu exits 1 loading the script.
 def main [] {
     print "check: opening the lab manifest"
-    # The deliberate fault: type error at runtime (integer + string).
-    let fault = (1 + "fault")
-    print $"check: unreachable, the fault evaluated to ($fault)"
+    # FIXED (the retry-lab experiment variable, 2026-11-14): the former
+    # parse-time fault (1 + "fault") is gone — fresh runs at this tip
+    # pass the check; retried/forked runs still pin the faulty version.
+    let fault = ("fault-fixed-on-main")
+    print $"check: the fault state reads ($fault)"
 }
