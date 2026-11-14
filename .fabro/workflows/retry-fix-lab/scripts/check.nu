@@ -5,11 +5,17 @@
 # later creates a NEW version and never reaches a retried or forked run
 # under the current semantics. That is the gap this lab demonstrates.
 #
-# The fault is a RUNTIME error (not parse-time) so admission accepts the
-# workflow and the stage fails in execution.
+# The fault: `1 + "fault"` is a TYPE error that nu 0.116.1 rejects at
+# PARSE time (nu::parser::operator_incompatible_types) — the original
+# "runtime error" claim was wrong (observed in lab run
+# 01M7CQG5NM79NS8EWVRYQKBKDP). Admission accepts the workflow either
+# way; at execution the stage exits non-zero and, with the check
+# node's on_failure="exit", the run blocks AT check.
 def main [] {
     print "check: opening the lab manifest"
-    # The deliberate fault: type error at runtime (integer + string).
+    # The deliberate fault: type error (integer + string). NEVER fix
+    # this line to unblock a pinned run — a fix belongs on main as the
+    # lab's separate fix leg, and only fresh runs pick it up.
     let fault = (1 + "fault")
     print $"check: unreachable, the fault evaluated to ($fault)"
 }

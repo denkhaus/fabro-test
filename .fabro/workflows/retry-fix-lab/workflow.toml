@@ -4,12 +4,16 @@ _version = 1
 graph = "workflow.fabro"
 
 # UI lab (user session 2026-11-14): specimen for the fork/retry
-# self-service exploration. The run's WORK stage makes real file changes
-# (checkpoint content); its CHECK stage runs a deliberately faulty
-# workflow-owned script (scripts/check.nu, a runtime type error). The
-# lab demonstrates that retry/fork replay the PINNED workflow version —
-# a fix merged to main afterward never reaches them. Not a bench facet:
-# the workbench table does not list it, so no round fires it.
+# self-service exploration. The run's WORK stage is an AGENT stage
+# making real file changes (the RETRY-LAB.md checkpoint journal); its
+# CHECK stage is a SCRIPT stage running a deliberately faulty
+# workflow-owned script (scripts/check.nu — a type error nu 0.116.1
+# rejects at parse time; admission accepts the workflow regardless).
+# The stage fails non-zero and on_failure="exit" blocks the run AT
+# check (the probe-44 shape). The lab demonstrates that retry/fork
+# replay the PINNED workflow version — a fix merged to main afterward
+# never reaches them. Not a bench facet: the workbench table does not
+# list it, so no round fires it.
 
 [run.model]
 provider = "zai"

@@ -1,11 +1,37 @@
 digraph retry_fix_lab {
     graph [goal="UI lab: a run blocked by a faulty workflow script, with real checkpoint work — for the fork/retry-on-new-tip semantics test (user session 2026-11-14)", default_max_retries=0, stall_timeout="5m"];
 
+    // Node shapes ARE the handler choice (lap-2 lesson, run
+    // 01M7CQG5NM79NS8EWVRYQKBKDP): the original specimen marked work
+    // and check with dead `script=` attributes on BOX nodes, so the
+    // engine ran both as LLM agents — the red script never failed a
+    // stage, the run reached exit and SUCCEEDED, and no blocked
+    // specimen ever existed. box (the default below) = agent stage;
+    // parallelogram = script stage whose non-zero exit fails the
+    // stage (probe-44 precedent).
     node [shape=box, style=rounded];
-    start [label="Start", script="print 'retry-fix-lab: start'"];
-    work [label="Work: make real changes", script="nu -c \"'retry-fix-lab work stage at (date now | format date %%Y-%%m-%%dT%%H:%%M:%%S)' | save --append RETRY-LAB.md; print 'work checkpoint written'\""];
-    check [label="Check: runs the faulty script", script="nu scripts/check.nu"];
-    exit [label="Exit", script="print 'retry-fix-lab: exit (unreachable until the fault is fixed)'"];
+
+    start [label="Start", shape=Mdiamond];
+    // The checkpoint-work maker: an AGENT stage appending the lab
+    // journal entry (RETRY-LAB.md) — real, reviewable changes that
+    // the fork/retry carry-vs-fresh question reads later.
+    work [label="Work: make real changes (checkpoint work — append the lab journal entry to RETRY-LAB.md; never touch the fault line in scripts/check.nu)"];
+    // The deliberate fault, now an actual SCRIPT stage: `nu
+    // scripts/check.nu` exits non-zero on the workflow-owned type
+    // error, the stage fails, and on_failure="exit" (work#1277,
+    // probe-44 facet) ends the run failed AT check — the blocked
+    // specimen. Without on_failure="exit" the default route policy
+    // would take the unconditional edge to exit and green the run
+    // anyway (the lap-2 trap, node-shape edition).
+    check [
+        label="Check: runs the faulty workflow-owned script (blocks the run)",
+        shape=parallelogram,
+        script="nu scripts/check.nu",
+        timeout="60s",
+        max_retries=0,
+        on_failure="exit"
+    ];
+    exit [label="Exit (reachable only when the fired version's check passes)", shape=Msquare];
 
     start -> work [label="continue"];
     work -> check [label="continue"];
