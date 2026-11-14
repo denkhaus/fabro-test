@@ -88,3 +88,50 @@ P6 Fix leg: after a `check.nu` fault fix lands on main, fresh runs go
   run branches (P5).
 - `start_record.base_sha` of the replay — old base vs the moved main
   tip IS the "on-new-tip" question itself.
+
+## Entry 3 — agent check stage (the red, read at stage level)
+
+- Run: `01M7CQZ2D5C3K9JF1ZBMPWPFRP`
+- Branch: `fabro/run/01M7CQZ2D5C3K9JF1ZBMPWPFRP`, base `66bd39`
+  (`66bbd39`), start commit `fbf7bff`, work commit `024cdfb`
+- Stage: `check` (LLM agent — the in-run pin finding below says why)
+- Written: 2026-11-14T10:13:12Z
+
+### The check-stage work
+
+1. THE FAULTY SCRIPT RAN: `nu scripts/check.nu` from the workflow
+   directory exits 1 with `nu::parser::operator_incompatible_types`
+   (`int + string`, the fault line). Nu rejects the file at PARSE
+   time, so the red is an execution fact, not an assumption — the
+   check stage's mandate ("runs the faulty script") is fulfilled.
+2. THE IN-RUN PIN FINDING (new evidence beyond P1's fork framing):
+   the engine served this stage from the version PINNED at run
+   creation, not from the branch's current graph. Proof: the stage
+   prompt is the OLD label ("Check: runs the faulty script" — the
+   `66bbd39` check label), although this run's own work commit
+   `024cdfb` had already rewritten the branch's `workflow.fabro` to
+   the parallelogram script stage (new label "Check: runs the faulty
+   workflow-owned script (blocks the run)"). `fabro inspect` reads
+   `check@1 handler=agent`. A run's own commits never re-shape its
+   stage table — the ADR-0008 pin holds MID-RUN, not only for forks.
+3. Consequence (P3 mechanics, original-run edition): an agent stage
+   cannot fail the run, so this red stays at stage level. The run
+   proceeds to `exit` and will end SUCCEEDED with a check row AND an
+   exit row — the lap-2 shape, NOT the probe-44 blocked shape. The
+   intended blocked specimen (P4) requires a fresh run on
+   post-publish main, where the parallelogram + `on_failure="exit"`
+   graph is the pinned version from birth.
+4. The fault line is untouched: byte-identical to the pinned source
+   (`let fault = (1 + "fault")`, verified against
+   `origin/fabro/run/01M7CQG5NM79NS8EWVRYQKBKDP`), and re-verified
+   exit 1 after this entry's edit.
+
+### Reading entry 3 against the predictions
+
+- P1's mechanism confirmed IN-RUN, without waiting for a fork: the
+  handler column says `agent` for a run whose own branch already
+  carries the script-stage fix.
+- P2 confirmed in advance of any fork: the pinned script is red in
+  execution (exit 1), whatever main does later.
+- P4 untouched: this lap's run cannot be the blocked specimen by
+  construction — it fires the fix, it cannot wear it.
