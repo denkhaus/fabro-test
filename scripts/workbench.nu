@@ -22,6 +22,10 @@ def assert-local-server []: nothing -> nothing {
 }
 const FABRO = ('~/.fabro/bin/fabro' | path expand)
 
+# The retry-latest facet (work#1320): sourced for its drive fn — no
+# main here (sourcing a main-bearing file would run it).
+source scripts/retry-latest-facet.nu
+
 # Probe registry: default expectation per workflow (probe-06 expects the
 # human_needed parking of its guard kill, probe-09 expects failure).
 const PROBES = [
@@ -1269,6 +1273,14 @@ def main [] {
     print '== workbench: platform checks'
     let prows = (platform-checks)
     print ($prows | table --index false)
+
+    # The retry-latest facet (work#1320's closes-when proof): faulty
+    # version -> failed specimen -> fixed version -> retry-latest ->
+    # green successor with carried work.
+    print '== workbench: retry-latest facet'
+    let facet_row = (retry-latest-facet $bench_id)
+    print ($facet_row | table --index false)
+    let prows = ($prows | append $facet_row)
 
     let probes = $PROBES
     print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
