@@ -13,7 +13,7 @@ digraph retry_fix_lab {
     check [
         label="Check: runs the faulty script",
         shape=parallelogram,
-        script="nu scripts/check.nu",
+        script="nu .fabro/workflows/retry-fix-lab/scripts/check.nu",
         max_retries=0,
         // work#1277 hygiene: `exit` ends the run failed AT the check —
         // the default route policy would take the unconditional edge
