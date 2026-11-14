@@ -9,3 +9,15 @@ graph = "workflow.fabro"
 [run.model]
 name = "xiaomi/mimo-v2.6-flash"
 provider = "openrouter"
+
+# The bench toolchain environment, repo-declared (ADR-0042, the fabro
+# line's develop pattern): the engine cooks this image at run init from
+# the checkout — .fabro/Dockerfile carries nushell plus the fabro and
+# mulch release binaries (stage scripts are pure nu; the mini seed loop
+# checks claims through nu). The build declaration overrides the server
+# catalog entry of the same id layer by layer.
+[environments.toolchain]
+provider = "docker"
+
+[environments.toolchain.image]
+dockerfile = { path = "../../Dockerfile" }
