@@ -34,7 +34,7 @@ def facet-register-version [graph: string]: nothing -> string {
     # rides INSIDE it (bundle-relative path — a ../../ escape is what
     # the raw API rightly refuses; the CLI publish path resolves and
     # embeds it the same way).
-    let dockerfile = (open --raw ../.fabro/Dockerfile)
+    let dockerfile = (open --raw .fabro/Dockerfile)
     let files = {
         "workflow.fabro": $graph,
         "workflow.toml": ("_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n\n[run.model]\nprovider = \"zai\"\nname = \"glm-4.7\"\n\n[environments.toolchain]\nprovider = \"docker\"\n\n[environments.toolchain.image]\ndockerfile = { path = \"Dockerfile\" }\n"),
