@@ -16,7 +16,7 @@ const CHECK_FIXED = "echo check-green"
 def facet-graph [check: string]: nothing -> string {
     # Backtick raw string (nu's raw form — single line, everything
     # literal): the DOT parses fine without newlines; the check
-    rides a placeholder replaced in.
+    # rides a placeholder replaced in.
     let template = `digraph retry_latest_facet { graph [goal="retry-latest facet specimen", default_max_retries=0, stall_timeout="5m"]; start [label="Start"]; work [label="Work", shape=parallelogram, script="echo facet-work-stage | tee -a FACET-RETRY.md"]; check [label="Check", shape=parallelogram, script="__CHECK__"]; exit [shape=Msquare, label="Exit"]; start -> work [label="continue"]; work -> check [label="continue"]; check -> exit [label="continue"]; }`
     $template | str replace "__CHECK__" $check
 }
