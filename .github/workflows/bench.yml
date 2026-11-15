@@ -15,10 +15,7 @@ jobs:
       - name: Everything parses (prestate-safe merge gate)
         run: |
           nu --version
-          for f in bench/*.nu tests/*.nu scripts/*.nu .fabro/workflows/*/scripts/*.nu; do
-            [ -e "$f" ] || continue
-            nu --ide-check 10 "$f" >/dev/null
-          done
+          nu scripts/lint-nu.nu
   tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
