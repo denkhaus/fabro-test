@@ -83,14 +83,15 @@ def run-kind [run_id: string]: nothing -> string {
 
 # The successor's checkout sha: the inspect view names the pinned
 # commit the worktree was prepared at (a git target object with
-# repo/branch/sha) — the plain run detail does not carry the target.
+# repo/branch/sha) — the plain run detail does not carry the target,
+# and inspect answers a LIST whose first element is the run.
 def checkout-sha [run_id: string]: nothing -> string {
     let inspected = (do { ^$FABRO inspect $run_id --json --server (server) } | complete)
     if $inspected.exit_code != 0 {
         ''
     } else {
-        let detail = ($inspected.stdout | from json)
-        let target = ($detail | get -o target | default ($detail | get -o spec.target | default null))
+        let detail = ($inspected.stdout | from json | get 0)
+        let target = ($detail | get -o spec.target | default ($detail | get -o target | default null))
         if $target == null {
             ''
         } else {
