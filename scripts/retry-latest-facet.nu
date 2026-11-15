@@ -41,10 +41,10 @@ def push-check [content: string, bench_id: string]: nothing -> string {
     let exists = (do { gh api $"repos/($REPO)/branches/($PROBE_BRANCH)" --silent } | complete)
     if $exists.exit_code != 0 {
         let main_sha = (gh api $"repos/($REPO)/branches/main" --jq .commit.sha)
-        gh api $"repos/($REPO)/git/refs" -f ref $"refs/heads/($PROBE_BRANCH)" -f sha $main_sha --silent
+        gh api -X POST $"repos/($REPO)/git/refs" -f $"ref=refs/heads/($PROBE_BRANCH)" -f $"sha=($main_sha)" --silent
     }
     let file = (gh api $"repos/($REPO)/contents/($CHECK_PATH)?ref=($PROBE_BRANCH)" --jq .sha)
-    gh api $"repos/($REPO)/contents/($CHECK_PATH)" -f message $"retry-latest facet: check script (round ($bench_id))" -f content ($content | encode base64) -f branch $PROBE_BRANCH -f sha $file --silent
+    gh api -X PUT $"repos/($REPO)/contents/($CHECK_PATH)" -f $"message=retry-latest facet: check script (round ($bench_id))" -f $"content=($content | encode base64)" -f $"branch=($PROBE_BRANCH)" -f $"sha=($file)" --silent
     gh api $"repos/($REPO)/branches/($PROBE_BRANCH)" --jq .commit.sha
 }
 
