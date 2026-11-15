@@ -87,7 +87,7 @@ def run-kind [run_id: string]: nothing -> string {
 def checkout-sha [run_id: string]: nothing -> string {
     let detail = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
     let target = ($detail | get -o target | default ($detail | get -o data.target | default null))
-    if ($target | is-null) {
+    if $target == null {
         ''
     } else {
         $target | get -o sha | default ''
