@@ -132,5 +132,5 @@ export def retry-latest-facet [bench_id: string]: nothing -> record {
     let carried_ok = ($carried >= 1)
     let tip_ok = ($checkout == $fixed_tip)
     let ok = ($status == 'succeeded' and $carried_ok and $tip_ok)
-    {facet: 'probe-45-retry-latest', ok: $ok, detail: $"successor ($status), carried ($carried) commit(s), checkout ($checkout) vs tip ($fixed_tip)"}
+    {facet: 'probe-45-retry-latest', ok: $ok, detail: $"successor ($status), carried ($carried) commits, checkout ($checkout) vs tip ($fixed_tip)"}
 }
