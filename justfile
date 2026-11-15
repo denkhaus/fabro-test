@@ -19,6 +19,11 @@ land subject:
 validate target="":
     @nu scripts/validate_workflows.nu {{target}}
 
+# Parse-check every nu script (the CI gate's local mirror — the sprint-89
+# facet burned five drive rounds on parse errors a pre-drive check catches).
+lint-nu:
+    nu scripts/lint-nu.nu
+
 # ONE probe without the full bench (no board clean, no mini/publish).
 #   just probe probe-03-tools           # default expect from the workbench table
 #   just probe probe-09-envelope-deny   # expects failed (envelope violation)

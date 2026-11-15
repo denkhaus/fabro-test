@@ -1,3 +1,4 @@
+# lint-nu: exempt satellite — parses through its sourcing driver (drive-retry-latest-facet.nu supplies server/auth-header/$FABRO)
 # retry-latest facet (work#1320, Part B shape): the git-backed drive —
 # a faulty workflow tip fails a run, the fix lands ON THE SAME BRANCH
 # (the tip moves, the bundle content changes), and retry-on-latest
