@@ -91,7 +91,9 @@ def checkout-sha [run_id: string]: nothing -> string {
         ''
     } else {
         let detail = ($inspected.stdout | from json | get 0)
-        let target = ($detail | get -o spec.target | default ($detail | get -o target | default null))
+        let target = ($detail
+            | get -o run_spec.target
+            | default ($detail | get -o spec.target | default null))
         if $target == null {
             ''
         } else {
