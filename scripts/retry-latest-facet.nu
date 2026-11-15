@@ -82,14 +82,16 @@ def run-kind [run_id: string]: nothing -> string {
 }
 
 # The successor's checkout sha: the run detail's target names the
-# pinned commit the worktree was prepared at.
+# pinned commit the worktree was prepared at (a git target object with
+# repo/branch/sha).
 def checkout-sha [run_id: string]: nothing -> string {
     let detail = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
-    let target = ($detail | get -o target | default ($detail | get -o data.target | default ''))
-    # The target string carries the sha after the last '@'
-    # (owner/repo@branch@sha); the fallback answers empty and the
-    # assertion names it.
-    $target | split row '@' | last
+    let target = ($detail | get -o target | default ($detail | get -o data.target | default null))
+    if ($target | is-null) {
+        ''
+    } else {
+        $target | get -o sha | default ''
+    }
 }
 
 # The facet drive: faulty tip -> failed specimen -> fix moves the tip
