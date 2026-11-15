@@ -81,16 +81,21 @@ def run-kind [run_id: string]: nothing -> string {
         | get 0.status.kind
 }
 
-# The successor's checkout sha: the run detail's target names the
-# pinned commit the worktree was prepared at (a git target object with
-# repo/branch/sha).
+# The successor's checkout sha: the inspect view names the pinned
+# commit the worktree was prepared at (a git target object with
+# repo/branch/sha) — the plain run detail does not carry the target.
 def checkout-sha [run_id: string]: nothing -> string {
-    let detail = (http get --headers (auth-header) $"((server))/api/v1/runs/($run_id)")
-    let target = ($detail | get -o target | default ($detail | get -o data.target | default null))
-    if $target == null {
+    let inspected = (do { ^$FABRO inspect $run_id --json --server (server) } | complete)
+    if $inspected.exit_code != 0 {
         ''
     } else {
-        $target | get -o sha | default ''
+        let detail = ($inspected.stdout | from json)
+        let target = ($detail | get -o target | default ($detail | get -o spec.target | default null))
+        if $target == null {
+            ''
+        } else {
+            $target | get -o sha | default ''
+        }
     }
 }
 
