@@ -44,7 +44,7 @@ def push-check [content: string, bench_id: string]: nothing -> string {
         gh api -X POST $"repos/($REPO)/git/refs" -f $"ref=refs/heads/($PROBE_BRANCH)" -f $"sha=($main_sha)" --silent
     }
     let file = (gh api $"repos/($REPO)/contents/($CHECK_PATH)?ref=($PROBE_BRANCH)" --jq .sha)
-    gh api -X PUT $"repos/($REPO)/contents/($CHECK_PATH)" -f $"message=retry-latest facet: check script (round ($bench_id))" -f $"content=($content | encode base64)" -f $"branch=($PROBE_BRANCH)" -f $"sha=($file)" --silent
+    gh api -X PUT $"repos/($REPO)/contents/($CHECK_PATH)" -f $"message=retry-latest facet: check script round ($bench_id)" -f $"content=($content | encode base64)" -f $"branch=($PROBE_BRANCH)" -f $"sha=($file)" --silent
     gh api $"repos/($REPO)/branches/($PROBE_BRANCH)" --jq .commit.sha
 }
 
