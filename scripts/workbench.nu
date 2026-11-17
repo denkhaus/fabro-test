@@ -516,7 +516,17 @@ def ensure-sync []: nothing -> nothing {
 # cell-path argument (`get -o "a.b.c") does NOT split on dots — it looks
 # up one literal column name — so the path stays bare here.
 def pebble-event [e: record]: nothing -> any {
-    $e | get -o item.record.body.ev.custom.event.event
+    # Stepwise access: rows of other custom kinds carry a STRING at the
+    # tail — a bare cell path would crash on it (workbench round 4,
+    # probe-24's tool-error-wrap emitted the string variant). The
+    # callers' `describe | str starts-with "record"` guard handles the
+    # returned string.
+    let ev = ($e | get -o item.record.body.ev.custom.event?)
+    if ($ev | describe | str starts-with 'record') {
+        $ev | get -o event?
+    } else {
+        $ev
+    }
 }
 
 def probe-run [name: string, expect: string, bench_id: string]: nothing -> record {
