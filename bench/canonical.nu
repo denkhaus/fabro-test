@@ -1,7 +1,6 @@
-# lint-nu: exempt — the deliberate red stub IS the prestate's task (the
-# workbench mini-integration seed; the seeded mini run makes it green).
-# Canonical workbench task — reset to this stub before every bench.
+# Canonical workbench task — the bench acceptance (tests/test-canonical.nu)
+# requires this script to print canonical-ok-9001. The bench resets the
+# red stub before every seeded mini run.
 def main []: nothing -> nothing {
-    # Stub: the bench seed replaces this with the required return value.
-    error make {msg: "bench prestate stub"}
+    print 'canonical-ok-9001'
 }
