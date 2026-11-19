@@ -439,7 +439,16 @@ def work-cli-checks []: nothing -> list<record> {
         loop {
             $attempts = ($attempts + 1)
             let listed = (do { ^$fabro work --server (server) list --project $project --json } | complete)
-            let items = (try { $listed.stdout | from json } catch { [] })
+            # work#1476's cursor-paged shape: the list answers a
+            # `{data: [...], total: int}` record now, not a bare array.
+            let items = (try {
+                let parsed = ($listed.stdout | from json)
+                if ($parsed | describe | str starts-with 'record') {
+                    $parsed | get -o data | default []
+                } else {
+                    $parsed
+                }
+            } catch { [] })
             if ($listed.exit_code == 0) and (($items | where itemKey == $key | length) > 0) {
                 $list_ok = true
                 $list_detail = $"($key) in the open list after ($attempts) reads"
