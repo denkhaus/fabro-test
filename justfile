@@ -44,7 +44,7 @@ probes:
 # the caller captured stdout — a lost table cost a full 15-minute rerun
 # twice (fork.31, fork.33).
 workbench:
-    bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-last.log'
+    @bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-current.log'; rc=$$?; if [ $$rc -ne 3 ]; then mv .workbench-current.log .workbench-last.log; else rm -f .workbench-current.log; fi; exit $$rc
 
 # The deliberate full bench (the compositional guard's explicit door).
 bench-full:
