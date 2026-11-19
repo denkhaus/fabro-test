@@ -20,6 +20,12 @@ provider = "github"
 owner = "denkhaus"
 repository = "fabro-test"
 
+[run.pull_request]
+enabled = true
+draft = false
+auto_merge = true
+merge_strategy = "squash"
+
 [environments.toolchain]
 provider = "docker"
 
