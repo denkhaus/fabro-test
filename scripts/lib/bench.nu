@@ -257,6 +257,12 @@ export def land-pr [
     # now structurally closed).
     let resync = (do { git checkout origin/main -- ...$paths } | complete)
     if $resync.exit_code != 0 { fail $"land: resync main (surgical, paths only): ($resync.stderr | str trim | str substring 0..200)" $tag }
+    # Move the main REF too (#202 lesson): content-aligned-but-ref-behind
+    # made the next landing see the whole set as staged and re-land it.
+    # --mixed touches ref + index, never the worktree — bystanders' edits
+    # stay on disk.
+    let refsync = (do { git reset --mixed origin/main --quiet } | complete)
+    if $refsync.exit_code != 0 { fail $"land: main ref sync: ($refsync.stderr | str trim | str substring 0..200)" $tag }
     let _ = (do { git branch -D $branch } | complete)
     print $"== land: ($subject) — merged via ($pr_url), main resynced — paths only, bystanders untouched"
 }
