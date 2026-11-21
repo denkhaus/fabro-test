@@ -1,117 +1,15 @@
 #!/usr/bin/env nu
-# land: one-command PR dance for workbench script changes on the PROTECTED
-# main (fabro-4b84 follow-up). Takes the DIRTY scripts/ tree as input —
-# never resets before committing (the manual dance wiped uncommitted edits
-# twice by resetting first: once by seed-ensure's origin reset, once by a
-# hand-rolled landing sequence).
+# land: one-command landing for bench changes on the PROTECTED main
+# (fabro-4b84 follow-up). Takes the DIRTY tree as input — never resets
+# before committing (the manual dance wiped uncommitted edits twice: once
+# by seed-ensure's origin reset, once by a hand-rolled landing sequence;
+# 2026-11-21 the resync became surgical — paths only, bystanders survive).
 #   nu scripts/land.nu 'commit subject'
-# Branch bench/workbench -> add scripts/ -> commit -> prune-fetch -> push
-# -> PR (reuses an open one) -> wait until checks REPORTED (red `tests` is
-# inherited from the stub prestate — admin overrides) -> squash merge
-# --admin -> local main resynced -> branch deleted.
-
-def fail [msg: string]: nothing -> nothing {
-    print -e $"╔══ LAND ALARM: ($msg) ══╗"
-    exit 1
-}
+# The dance itself (branch cut/resume from origin/main, push, open-PR
+# reuse, wait for checks REPORTED, squash --admin, main resync) lives in
+# the bench adapter library: scripts/lib/bench.nu, land-pr.
+use lib/bench.nu *
 
 def main [subject: string]: nothing -> nothing {
-    let branch = 'bench/workbench'
-    # Sync FIRST (sprint-74 retro, 2026-11-02): a stale local main cut the
-    # branch from a pre-merge base — the prior PR's squash-merge showed up
-    # as a duplicate commit and GitHub answered CONFLICTING (PR #125).
-    let f0 = (do { git fetch --prune origin --quiet } | complete)
-    if $f0.exit_code != 0 {
-        fail $"land: fetch: ($f0.stderr | str trim | str substring 0..200)"
-    }
-    # A resumable branch (exists, carries commits beyond origin/main) is
-    # KEPT — a prior land may have committed already and died later; a
-    # fresh branch is cut from origin/main, never the possibly-stale
-    # local main. NEVER reset: a dirty tree rides along or the checkout
-    # refuses loudly (the header's wipe lesson).
-    let has_branch = (do { git rev-parse --verify $"refs/heads/($branch)" --quiet } | complete).exit_code == 0
-    let ahead_raw = (if $has_branch {
-        (do { git log $"origin/main..($branch)" --oneline } | complete)
-    } else {
-        {exit_code: 1, stdout: '', stderr: ''}
-    })
-    let resuming = ($has_branch and $ahead_raw.exit_code == 0 and (($ahead_raw.stdout | str trim) != ''))
-    if $resuming {
-        let count = (($ahead_raw.stdout | lines | length) | into string)
-        print $"land: resuming ($branch) with ($count) commit\(s\) beyond origin/main"
-        let co = (do { git checkout $branch --quiet } | complete)
-        if $co.exit_code != 0 {
-            fail $"land: back to the branch: ($co.stderr | str trim | str substring 0..200)"
-        }
-    } else {
-        let sw = (do { git checkout -B $branch origin/main --quiet } | complete)
-        if $sw.exit_code != 0 {
-            fail $"land: branch from origin/main: ($sw.stderr | str trim | str substring 0..200) — local changes conflicting with the newer main must be rebased by hand; land never resets"
-        }
-    }
-    # .fabro/workflows rides along: probe rigs are bench assets landing
-    # through the same dance (fabro-70af probes 17-19, 2026-10-02).
-    # Bench docs (FACETS.md, README.md, AGENTS.md) land the same way: the
-    # catalog row and the probe that proves it are one change, and the
-    # written-language rule (ADR-0033) is visible where the work happens.
-    let add = (do { git add scripts/ justfile .fabro/Dockerfile .fabro/workflows FACETS.md README.md AGENTS.md } | complete)
-    if $add.exit_code != 0 { fail $"land: add: ($add.stderr | str trim | str substring 0..200)" }
-    # STAGED, not porcelain: unrelated dirty or untracked files (a
-    # sibling agent's work — the roster rule) must neither block the
-    # retry nor ride along; land commits exactly what its add list
-    # staged.
-    let staged = (do { git diff --cached --name-only } | complete | get stdout | str trim)
-    if ($staged | is-empty) {
-        # retry semantics, now actually implemented: a prior land may
-        # have committed+pushed already and died on a transient GitHub
-        # 504 — continue when the branch carries commits beyond
-        # origin/main, refuse only when there is truly nothing
-        let ahead = (do { git log origin/main..HEAD --oneline } | complete | get stdout | str trim)
-        if ($ahead | is-empty) { fail 'land: nothing to commit — pass the edit BEFORE running land' }
-        let count = (($ahead | lines | length) | into string)
-        print $"land: nothing new to commit — continuing with the ($count) commit\(s\) already on the branch"
-    } else {
-        let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m $subject --quiet } | complete)
-        if $cm.exit_code != 0 { fail $"land: commit: ($cm.stderr | str trim | str substring 0..200)" }
-    }
-    let push = (do { git push --force-with-lease origin $"($branch):($branch)" --quiet } | complete)
-    if $push.exit_code != 0 { fail $"land: push: ($push.stderr | str trim | str substring 0..200)" }
-    let existing = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state open --json number,url --limit 1 } | complete)
-    let open_prs = if $existing.exit_code == 0 { $existing.stdout | from json } else { [] }
-    let pr_url = if ($open_prs | is-not-empty) {
-        $open_prs | first | get url
-    } else {
-        let pr = (do { ^gh pr create -R denkhaus/fabro-test --base main --head $branch --title $subject --body 'Workbench script change; red tests is inherited from the stub prestate — bypassed with --admin as the bench always does.' } | complete)
-        if $pr.exit_code != 0 { fail $"land: gh pr create: ($pr.stderr | str trim | str substring 0..200)" }
-        $pr.stdout | str trim
-    }
-    mut ready = false
-    for _ in 1..60 {
-        let roll = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json statusCheckRollup } | complete)
-        if $roll.exit_code == 0 {
-            let entries = ($roll.stdout | from json | get -o statusCheckRollup | default [])
-            if ($entries | is-not-empty) {
-                let pending = ($entries | where {|c| ($c | get -o status | default 'COMPLETED') != 'COMPLETED'})
-                if ($pending | is-empty) { $ready = true; break }
-            }
-        }
-        sleep 5sec
-    }
-    if not $ready { fail $"land: PR checks never finished reporting: ($pr_url)" }
-    let merge = (do { ^gh pr merge $pr_url -R denkhaus/fabro-test --squash --admin --delete-branch } | complete)
-    if $merge.exit_code != 0 {
-        # a 504 can time out the RESPONSE while the merge itself succeeds —
-        # verify the PR state before declaring failure
-        let st = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json state } | complete)
-        let state = if $st.exit_code == 0 { $st.stdout | from json | get -o state | default '' } else { '' }
-        if $state != 'MERGED' { fail $"land: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
-    }
-    let co = (do { git checkout main --quiet } | complete)
-    if $co.exit_code != 0 { fail $"land: back to main: ($co.stderr | str trim | str substring 0..200)" }
-    let f2 = (do { git fetch --prune origin --quiet } | complete)
-    if $f2.exit_code != 0 { fail $"land: refetch: ($f2.stderr | str trim | str substring 0..200)" }
-    let reset = (do { git reset --hard origin/main --quiet } | complete)
-    if $reset.exit_code != 0 { fail $"land: resync main: ($reset.stderr | str trim | str substring 0..200)" }
-    let _ = (do { git branch -D $branch } | complete)
-    print $"== land: ($subject) — merged via ($pr_url), main resynced"
+    land-pr $subject
 }

@@ -3,28 +3,16 @@
 # + mini integration with publish. Every run carries label bench=<id>.
 # Red/green table per facet; red -> exit 1.
 
-# Runplace-agnostic: the server comes from FABRO_SERVER (same convention
-# as run-mini.nu); unset defaults to the local dev stack.
-def server []: nothing -> string { $env.FABRO_SERVER? | default 'http://127.0.0.1:32276' }
-
-# Bench safety (fabro-6041 hygiene rule, 2026-10-24 incident): an exported
-# FABRO_SERVER pointing at production silently sent a probe run at
-# mirtuell. The bench fires runs and mutates the work registry — refuse
-# non-local servers unless FABRO_BENCH_ALLOW_REMOTE=1 is set in the same
-# breath as an explicit decision.
-def assert-local-server []: nothing -> nothing {
-    let s = (server)
-    let local = ($s | str starts-with 'http://127.0.0.1') or ($s | str starts-with 'http://localhost')
-    if (not $local) and ($env.FABRO_BENCH_ALLOW_REMOTE? | default '') != '1' {
-        print -e $"workbench: refusing non-local server '($s)' — the bench fires runs and writes the work registry. Set FABRO_BENCH_ALLOW_REMOTE=1 to force."
-        exit 2
-    }
-}
-const FABRO = ('~/.fabro/bin/fabro' | path expand)
+# The bench adapter library (scripts/lib/bench.nu) owns the platform
+# adapters: server resolution, the local-server guard, the auth header,
+# the gh shape normalization, the run lifecycle pieces, the events walk,
+# and the landing. This file is a driver: it composes the adapters, it
+# does not re-implement them (one fix reaches every driver).
+use lib/bench.nu *
 
 # The retry-latest facet (work#1320): sourced for its drive fn — no
-# main here (sourcing a main-bearing file would run it). The path is
-# file-relative (nu resolves source against the sourcing file's dir).
+# main here (sourcing a main-bearing file would run it). The satellite
+# carries its own dependencies (it uses the adapter library itself).
 source retry-latest-facet.nu
 
 # Probe registry: default expectation per workflow (probe-06 expects the
@@ -209,20 +197,6 @@ const PROBES = [
     # first in this repo before the attribute landed.
     [probe-44-guard-stop failed]
 ]
-
-def auth-header []: nothing -> record {
-    # dev-token entries carry `token`; OAuth entries carry `access_token`
-    # (short-lived — the CLI refreshes it; run the bench with a fresh login
-    # window when raw http calls start failing mid-run).
-    let s = (open ~/.fabro/auth.json | get servers | get -o (server))
-    let token = ($s | get -o token | default ($s | get -o access_token | default ''))
-    { Authorization: $"Bearer ($token)" }
-}
-
-def fail [msg: string]: nothing -> nothing {
-    print -e $"╔══ WORKBENCH ALARM: ($msg) ══╗"
-    exit 1
-}
 
 # Retire a confirmed expected park (user directive 2026-11-14): a green
 # human_needed facet proves the guard parked correctly — the spent probe
@@ -556,7 +530,13 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     let env_id = (if $name == 'probe-43-env-build' { 'probe43-build' } else { 'toolchain' })
     # expect rides as a LABEL: a failed run in the list must be recognizable
     # as red-by-design from the outside (bench probes 06/09/15 fail on purpose)
-    let created = (do { ^$FABRO create $name --label $"bench=($bench_id)" --label $"expect=($expect)" --environment $env_id --json --server (server) } | complete)
+    let created = (run-create [
+        'create' $name
+        '--label' $"bench=($bench_id)"
+        '--label' $"expect=($expect)"
+        '--environment' $env_id
+        '--json' '--server' (server)
+    ] --what $"probe ($name)")
     if $created.exit_code != 0 {
         let msg = ($created.stderr | str trim)
         # expect 'refused': admission must REJECT the graph and say why
@@ -572,7 +552,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     if $expect == 'refused' {
         return {facet: $name, ok: false, detail: 'expected an admission refusal, but create succeeded'}
     }
-    let run_id = ($created.stdout | from json | get -o run_id | default '')
+    let run_id = $created.run_id
     # The run TITLE carries the expectation (user directive 2026-10-31):
     # a must-fail probe's red run and a must-succeed probe's green run are
     # distinguishable on the board at a glance — the expect LABEL stays,
@@ -591,7 +571,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         }
     }
     if ($run_id | is-empty) { return {facet: $name, ok: false, detail: 'no run_id'} }
-    let started = (do { ^$FABRO start $run_id --server (server) } | complete)
+    let started = (run-start $run_id)
     if $started.exit_code != 0 {
         return {facet: $name, ok: false, detail: ($started.stderr | str trim | str substring 0..140)}
     }
@@ -601,7 +581,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         if not $answered { return {facet: $name, ok: false, detail: 'hitl questions not fully answered'} }
     }
 
-    let waited = (do { ^$FABRO wait $run_id --json --server (server) } | complete)
+    let waited = (run-wait $run_id)
     let info = (try { $waited.stdout | from json } catch { null })
     if $info == null { return {facet: $name, ok: false, detail: 'no terminal json'} }
     let status = ($info | get -o status | default '?')
@@ -1196,75 +1176,18 @@ def seed-ensure []: nothing -> nothing {
             fail $"seed-ensure: cannot re-pin fabro-test-9001: ($upd.stderr | str trim | str substring 0..200) — restore the row from git history, fixed id; seeds create cannot mint it"
         }
     }
-    # (c) land the prestate on the PROTECTED main through the PR dance.
-    #     `fabro create` refuses a HEAD that is not on origin (clone-based
-    #     target derivation) and direct pushes are rejected by branch
-    #     protection — so the commit rides: bench branch -> PR -> squash
-    #     merge (--admin) -> local main resynced to the squashed commit.
-    #     Every step is exit-checked: the old silent `git push | complete`
-    #     left an unpushed commit and blocked the mini leg (fabro-4b84).
+    # (c) land the prestate on the PROTECTED main through the landing
+    #     (land-pr in the adapter library): branch -> PR -> squash --admin
+    #     -> local main resynced. `fabro create` refuses a HEAD that is
+    #     not on origin (clone-based target derivation) and direct pushes
+    #     are rejected by branch protection — so the commit rides the PR.
     let dirty = (do { git status --porcelain } | complete | get stdout | str trim)
     if ($dirty | is-empty) {
         print '== workbench: canonical seed ensured (fabro-test-9001, fixed wording) — prestate already on origin/main'
         return
     }
-    let branch = 'bench/prestate'
-    let sw = (do { git checkout -B $branch --quiet } | complete)
-    if $sw.exit_code != 0 { fail $"seed-ensure: branch ($branch): ($sw.stderr | str trim | str substring 0..200)" }
-    let add = (do { git add bench/canonical.nu tests/test-canonical.nu .seeds/issues.jsonl } | complete)
-    if $add.exit_code != 0 { fail $"seed-ensure: git add: ($add.stderr | str trim | str substring 0..200)" }
-    let cm = (do { git -c user.name=denkhaus -c user.email=denkhaus@users.noreply.github.com commit -m 'bench: reset canonical prestate + reopen seed fabro-test-9001' --quiet } | complete)
-    if $cm.exit_code != 0 { fail $"seed-ensure: commit: ($cm.stderr | str trim | str substring 0..200)" }
-    let push = (do { git push --force-with-lease origin $"($branch):($branch)" --quiet } | complete)
-    if $push.exit_code != 0 { fail $"seed-ensure: push ($branch): ($push.stderr | str trim | str substring 0..200)" }
-    # reuse an OPEN PR on the bench branch when a prior dance stalled mid-way
-    # (gh pr view <branch> also returns CLOSED pull requests — merging one
-    # always fails with 'Base branch was modified')
-    let existing = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state open --json number,url --limit 1 } | complete)
-    let parsed998 = if $existing.exit_code == 0 { try { let parsed = ($existing.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] } } else { [] }
-    let open_prs = $parsed998
-    let pr_url = if ($open_prs | is-not-empty) {
-        $open_prs | first | get url
-    } else {
-        let pr_title = 'bench: reset canonical prestate + reopen seed fabro-test-9001'
-        let pr_body = 'Deterministic mini-loop prestate: canonical stub reset + fabro-test-9001 re-pinned. Red `tests` by design until the mini run lands the fix. Squash-merge; the workbench resyncs local main afterwards.'
-        let pr = (do { ^gh pr create -R denkhaus/fabro-test --base main --head $branch --title $pr_title --body $pr_body } | complete)
-        if $pr.exit_code != 0 { fail $"seed-ensure: gh pr create: ($pr.stderr | str trim | str substring 0..200)" }
-        $pr.stdout | str trim
-    }
-    # Required checks must REPORT before --admin may merge. The prestate is
-    # red BY DESIGN (tests fail against the stub; the mini run makes them
-    # green), so wait for every check to be COMPLETED — do not demand green —
-    # then merge with the admin override.
-    mut ready = false
-    for _ in 1..60 {
-        let roll = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json statusCheckRollup } | complete)
-        if $roll.exit_code == 0 {
-            let entries = ($roll.stdout | from json | get -o statusCheckRollup | default [])
-            if ($entries | is-not-empty) {
-                let pending = ($entries | where {|c| ($c | get -o status | default 'COMPLETED') != 'COMPLETED'})
-                if ($pending | is-empty) { $ready = true; break }
-            }
-        }
-        sleep 5sec
-    }
-    if not $ready { fail $"seed-ensure: PR checks never finished reporting: ($pr_url)" }
-    let merge = (do { ^gh pr merge $pr_url -R denkhaus/fabro-test --squash --admin --delete-branch } | complete)
-    if $merge.exit_code != 0 {
-        # a 504 can time out the RESPONSE while the merge itself succeeds —
-        # verify the PR state before declaring failure
-        let st = (do { ^gh pr view $pr_url -R denkhaus/fabro-test --json state } | complete)
-        let state = if $st.exit_code == 0 { $st.stdout | from json | get -o state | default '' } else { '' }
-        if $state != 'MERGED' { fail $"seed-ensure: gh pr merge ($pr_url): ($merge.stderr | str trim | str substring 0..200)" }
-    }
-    let f2 = (do { git fetch origin main --quiet } | complete)
-    if $f2.exit_code != 0 { fail $"seed-ensure: refetch: ($f2.stderr | str trim | str substring 0..200)" }
-    let co2 = (do { git checkout main --quiet } | complete)
-    if $co2.exit_code != 0 { fail $"seed-ensure: back to main: ($co2.stderr | str trim | str substring 0..200)" }
-    let reset2 = (do { git reset --hard origin/main --quiet } | complete)
-    if $reset2.exit_code != 0 { fail $"seed-ensure: resync main to origin: ($reset2.stderr | str trim | str substring 0..200)" }
-    let _ = (do { git branch -D $branch } | complete)
-    print $"== workbench: canonical seed ensured — fabro-test-9001 re-pinned, landed via PR ($pr_url)"
+    land-pr 'bench: reset canonical prestate + reopen seed fabro-test-9001' --branch 'bench/prestate' --paths ['bench/canonical.nu' 'tests/test-canonical.nu' '.seeds/issues.jsonl'] --pr-title 'bench: reset canonical prestate + reopen seed fabro-test-9001' --pr-body 'Deterministic mini-loop prestate: canonical stub reset + fabro-test-9001 re-pinned. Red `tests` by design until the mini run lands the fix. Squash-merge; the workbench resyncs local main afterwards.' --tag 'WORKBENCH'
+    print '== workbench: canonical seed ensured — fabro-test-9001 re-pinned, landed via the PR above'
 }
 
 # Single probe run — no board clean, no mini integration.
@@ -1356,30 +1279,29 @@ def main [] {
     # the provider is fine, the quota is spent) would otherwise kill
     # the run BEFORE the rows print, erasing the whole table's result.
     let force_args = (if ($env.FABRO_BENCH_FORCE? | default '') == '1' { ['--force'] } else { [] })
-    let mini = (do { ^$FABRO create mini ...$force_args --label $"bench=($bench_id)" --environment toolchain --json --server (server) } | complete)
+    let mini = (run-create (['create' 'mini'] | append $force_args | append [
+        '--label' $"bench=($bench_id)"
+        '--environment' 'toolchain'
+        '--json' '--server' (server)
+    ]) --what 'mini seed loop')
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
-    let mini_id = ($mini.stdout | from json | get -o run_id)
+    let mini_id = $mini.run_id
     # The integration run carries the same board marker (user directive
     # 2026-10-31): a red mini is always an unexpected failure.
     let _ = (try {
         http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($mini_id)" {title: "must-succeed: mini seed loop"}
     } catch {|err| print -e $"workbench: mini title patch failed: ($err.msg | str substring 0..120)" })
-    let _ = (do { ^$FABRO start $mini_id --server (server) } | complete)
-    let mw = (do { ^$FABRO wait $mini_id --json --server (server) } | complete)
+    let _ = (run-start $mini_id)
+    let mw = (run-wait $mini_id)
     let mini_ok = ($mw.stdout | from json | get -o status | default 'failed') == 'succeeded'
     $rows = ($rows | append {facet: '09 mini seed loop', ok: $mini_ok, detail: $"run ($mini_id)"})
     if $mini_ok {
         # the mini stream exceeds 1000 events — walk pages (the notification
         # rides at the very end, after the stage journals; bench 0928-205934
         # counted 0 against a real notification.sent at event ~2900)
-        mut evs = []
-        mut after = 0
-        for _ in 1..12 {
-            let page = (http get --headers (auth-header) $"((server))/api/v1/runs/($mini_id)/events?limit=1000&after=($after)" | get -o data | default [])
-            if ($page | is-empty) { break }
-            $after = ($page | last | get stream_seq)
-            $evs = ($evs | append $page)
-        }
+        let walked = (events-page $mini_id)
+        mut evs = $walked.events
+        mut after = $walked.after
         # The notification append rides a sub-second race past the
         # walk's window (observed bench 1031: terminal seq 353 walked,
         # notification.sent seq 354 landed milliseconds later — the
@@ -1417,8 +1339,7 @@ def main [] {
         # annotation keeps the null-sentinel pattern.
         mut engine_pr: any = null
         for _ in 1..6 {
-            let lst = (do { ^gh pr list -R denkhaus/fabro-test --head $branch --state all --json number,author --limit 1 } | complete)
-            let hits = (try { let parsed = ($lst.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] })
+            let hits = (gh-pr-list --head $branch --state all --fields [number author] --limit 1)
             if ($hits | length) > 0 {
                 $engine_pr = ($hits | first)
                 break
@@ -1471,8 +1392,7 @@ def main [] {
         # backpressureOpenPrCap=1 refuses the next publish (observed:
         # PRs #95/#96 cascading). Close the mini's open PR on the way
         # out; the branch stays as evidence.
-        let open = (do { ^gh pr list -R denkhaus/fabro-test --head $"fabro/run/($mini_id)" --state open --json number --limit 1 } | complete)
-        let hits = (try { let parsed = ($open.stdout | from json); if ($parsed | describe | str starts-with 'record') { [$parsed] } else { $parsed } } catch { [] })
+        let hits = (gh-pr-list --head $"fabro/run/($mini_id)" --fields [number] --limit 1)
         if ($hits | length) > 0 {
             let num = ($hits | first | get number)
             let _ = (do { ^gh pr close $num -R denkhaus/fabro-test --comment 'bench hygiene: red bench closes its mini PR so backpressureOpenPrCap does not refuse the next publish (work#1049)' } | complete)

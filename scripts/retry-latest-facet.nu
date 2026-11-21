@@ -1,5 +1,9 @@
-# lint-nu: exempt satellite — parses through its sourcing driver (drive-retry-latest-facet.nu supplies server/auth-header/$FABRO)
 # retry-latest facet (work#1320, Part B shape): the git-backed drive —
+# self-sufficient since the bench adapter library (arch review 2026-11-21):
+# server/auth-header/$FABRO come from scripts/lib/bench.nu — no sourcing
+# driver supplies context under the table anymore.
+use lib/bench.nu *
+#
 # a faulty workflow tip fails a run, the fix lands ON THE SAME BRANCH
 # (the tip moves, the bundle content changes), and retry-on-latest
 # MATERIALIZES the fixed version from that tip: no other run of the
@@ -62,17 +66,10 @@ def specimen-run [bench_id: string]: nothing -> string {
         '--label' $"bench=($bench_id)"
         '--json' '--server' (server)
     ]
-    let created = (do { ^$FABRO ...$create_args } | complete)
-    if $created.exit_code != 0 {
-        error make {msg: $"retry-latest facet: specimen create failed: ($created.stderr | str substring 0..300)"}
-    }
-    let run_id = ($created.stdout | from json | get -o run_id | default ($created.stdout | from json | get -o id))
-    if ($run_id | is-empty) {
-        error make {msg: $"retry-latest facet: specimen create answered no id: ($created.stdout | str substring 0..300)"}
-    }
-    let _ = (do { ^$FABRO start $run_id --server (server) } | complete)
-    let _ = (^$FABRO wait $run_id --json --server (server) | complete)
-    $run_id
+    # run-lifecycle fails loudly on create/start trouble — the old silent
+    # `let _ =` start/wait would hang the facet on a refused start instead.
+    let driven = (run-lifecycle $create_args --what 'retry-latest facet: specimen')
+    $driven.run_id
 }
 
 def run-kind [run_id: string]: nothing -> string {

@@ -249,8 +249,14 @@ export def land-pr [
     if $co.exit_code != 0 { fail $"land: back to main: ($co.stderr | str trim | str substring 0..200)" $tag }
     let f2 = (do { git fetch --prune origin --quiet } | complete)
     if $f2.exit_code != 0 { fail $"land: refetch: ($f2.stderr | str trim | str substring 0..200)" $tag }
-    let reset = (do { git reset --hard origin/main --quiet } | complete)
-    if $reset.exit_code != 0 { fail $"land: resync main: ($reset.stderr | str trim | str substring 0..200)" $tag }
+    # Resync SURGICALLY — checkout the landing's paths from origin/main,
+    # never a tree-wide reset --hard: bystanders' uncommitted work outside
+    # the landing's paths must survive the dance (2026-11-21: a setup
+    # landing's final reset wiped the in-progress adapter-library driver
+    # edits — the wipe class the old header warned about, third instance,
+    # now structurally closed).
+    let resync = (do { git checkout origin/main -- ...$paths } | complete)
+    if $resync.exit_code != 0 { fail $"land: resync main (surgical, paths only): ($resync.stderr | str trim | str substring 0..200)" $tag }
     let _ = (do { git branch -D $branch } | complete)
-    print $"== land: ($subject) — merged via ($pr_url), main resynced"
+    print $"== land: ($subject) — merged via ($pr_url), main resynced (paths only; bystanders untouched)"
 }

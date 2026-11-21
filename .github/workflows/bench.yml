@@ -24,3 +24,5 @@ jobs:
       - uses: jdx/mise-action@v2
       - name: Bench acceptance (green on run PRs; red prestate is the task)
         run: nu tests/test-canonical.nu
+      - name: Bench adapter library (gh shape fixtures)
+        run: nu tests/test-bench-lib.nu
