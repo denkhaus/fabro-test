@@ -258,5 +258,5 @@ export def land-pr [
     let resync = (do { git checkout origin/main -- ...$paths } | complete)
     if $resync.exit_code != 0 { fail $"land: resync main (surgical, paths only): ($resync.stderr | str trim | str substring 0..200)" $tag }
     let _ = (do { git branch -D $branch } | complete)
-    print $"== land: ($subject) — merged via ($pr_url), main resynced (paths only; bystanders untouched)"
+    print $"== land: ($subject) — merged via ($pr_url), main resynced — paths only, bystanders untouched"
 }
