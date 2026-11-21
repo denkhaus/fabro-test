@@ -613,6 +613,15 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     if $ok and $name == 'probe-04-runtools' {
         let children = (http get --headers (auth-header) $"((server))/api/v1/runs?limit=50" | get data | where {|r| (($r | get -o parent_id | default '') == $run_id)})
         let child_ok = ($children | length) > 0
+        # The board's expectation vocabulary (operator rule 2026-11-21):
+        # a spawned child of the run-tools probe is expected to succeed,
+        # so its tile carries the must-succeed prefix — same contract as
+        # the mini loop's title (workbench.nu's mini title patch). The
+        # title patch is legal on terminal runs (probed live).
+        for child in $children {
+            let child_id = ($child | get id)
+            http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($child_id)" {title: $"must-succeed: ($child | get -o title | default 'Probe04Child child run')"}
+        }
         return {facet: $name, ok: $child_ok, detail: ($detail + $" | children=($children | length)") }
     }
     if $ok and $name == 'probe-07-artifacts' {
