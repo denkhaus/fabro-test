@@ -1264,36 +1264,26 @@ def main [] {
     # facet 10's notification route must exist BEFORE any run completes
     route-ensure
     print '== workbench: platform checks'
-    # Reconstruction note (2026-11-21): the targeted-drive guards for the
-    # platform checks, the retry facet, and the probe filter were lost in
-    # the #199 wipe and are rebuilt from the arm's documented contract
-    # (captured header + operator rule). The exact original filter lives
-    # in the earlier session's log — reconcile when it is found.
-    let prows = (if $only == null {
-        platform-checks
-    } else {
-        []
-    })
-    if $only == null {
-        print ($prows | table --index false)
-    }
+    let prows = (platform-checks)
+    print ($prows | table --index false)
 
     # The retry-latest facet (work#1320's closes-when proof): faulty
     # version -> failed specimen -> fixed version -> retry-latest ->
     # green successor with carried work.
-    let facet_row = (if $only == null {
-        print '== workbench: retry-latest facet'
-        retry-latest-facet $bench_id
-    } else {
-        {facet: 'probe-45-retry-latest', ok: true, detail: 'skipped — targeted drive'}
-    })
+    print '== workbench: retry-latest facet'
+    let facet_row = (retry-latest-facet $bench_id)
+    print ($facet_row | table --index false)
     let prows = ($prows | append $facet_row)
 
-    # a targeted drive names the probe it wants proven — exact-name match
+    # a targeted drive names the probe it wants proven — exact-name match.
+    # Recovered VERBATIM from the opencode snapshot store (2026-11-21):
+    # the arm's original was wiped in the #199 landing; by the original
+    # design platform checks and the retry facet run UNGUARDED — only
+    # the probe loop and the mini leg answer WORKBENCH_ONLY.
     let probes = (if $only == null {
         $PROBES
     } else {
-        $PROBES | where {|p| ($p.name in $only)}
+        $PROBES | where {|p| $p.name in $only}
     })
     print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
     mut rows = []
@@ -1302,8 +1292,8 @@ def main [] {
         $rows = ($rows | append (probe-run $p.name $p.expect $bench_id))
     }
 
-    if $only == null {
     print '== workbench: mini integration (seed loop + publish)'
+    if $only == null or 'mini' in $only {
     seed-ensure
     # mini needs the toolchain env since the loop assets are nu and the
     # closeout is fail-closed on the seeds CLI (seeds-e160): test-local's
