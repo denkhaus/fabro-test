@@ -39,3 +39,23 @@ the OLD contract — a green bench proves the probes, not the platform
 days, 2026-11-03..10, reading the platform's correct teaching refusal
 as red). When a door changes, grep the probes for its tool names and
 re-decide each expectation in the same change.
+
+## Agent skills
+
+### Issue tracker
+
+Two trackers, both CLIs pinned via mise (same pins as `../fabro`): bench
+seeds in `.seeds/` via the `seeds` CLI; proof items on the central
+tracker (project `fabro-proof` on denkhaus/work) via the `fabro work`
+CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage role labels, used as-is. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: local `GLOSSARY.md` + `docs/adr/` are created lazily;
+the governing platform glossary and ADRs live in `../fabro`. See
+`docs/agents/domain.md`.

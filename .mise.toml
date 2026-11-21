@@ -1,7 +1,12 @@
 [tools]
 # CI + fresh checkouts: the harness is pure nu (nushell-pro). The seeds
-# tracker CLI comes from dev hosts' global mise / the toolchain image.
+# tracker CLI is pinned below — no reliance on a global install.
 "aqua:nushell/nushell" = "0.116.1"
 # lefthook pre-commit (betterleaks secrets scan) resolves via mise —
 # pinned locally so the hook works in fresh checkouts too.
 "aqua:betterleaks/betterleaks" = "1.8.1"
+# The bench seed tracker CLI, pinned LOCALLY via mise's cargo backend
+# (same pin as ../fabro; workbench.nu calls it as `mise exec -- seeds`).
+"cargo:seeds" = "0.13.0"
+# Expertise CLI (git-native; bin: mulch), same pin as ../fabro.
+"cargo:mulch" = "0.1.0"
