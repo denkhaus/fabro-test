@@ -42,9 +42,11 @@ probes:
 # Self-logging (2026-11-10, the recurring tail-capture lesson): the full
 # table and every probe line land in .workbench-last.log regardless of how
 # the caller captured stdout — a lost table cost a full 15-minute rerun
-# twice (fork.31, fork.33).
+# twice (fork.31, fork.33). Red rounds KEEP their table (5098a6c
+# semantics, restored 2026-11-21: the &&/|| rm deleted exactly the
+# captured red table); the guard's exit-3 refusal moves nothing.
 workbench:
-    @bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-current.log' && mv -f .workbench-current.log .workbench-last.log || rm -f .workbench-current.log
+    @bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-current.log'; rc=$$?; if [ $$rc -eq 3 ]; then mv -f .workbench-current.log .workbench-red-$$(date +'%m%d-%H%M%S').log; else mv -f .workbench-current.log .workbench-last.log; fi; exit $$rc
 
 # The deliberate full bench (the compositional guard's explicit door).
 bench-full:
