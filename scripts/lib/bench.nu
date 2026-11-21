@@ -166,6 +166,20 @@ export def land-pr [
     # as a duplicate commit and GitHub answered CONFLICTING (PR #125).
     let f0 = (do { git fetch --prune origin --quiet } | complete)
     if $f0.exit_code != 0 { fail $"land: fetch: ($f0.stderr | str trim | str substring 0..200)" $tag }
+    # Bystander inventory (retro 2026-11-21): the dance is bystander-safe
+    # since the surgical resync, but what the tree carries BESIDES the
+    # landing must be visible before it rides along — the wipe incidents
+    # were invisible until they struck.
+    let dirty = (do { git status --porcelain } | complete | get stdout | lines | where {|l| ($l | str trim) != '' })
+    let watchers = ($paths | each {|p| ($p | str trim -r -c '/')})
+    let bystanders = ($dirty | where {|l|
+        let p = ($l | str substring 3..)
+        not ($watchers | any {|w| ($p == $w) or ($p | str starts-with $"($w)/")})
+    })
+    if ($bystanders | is-not-empty) {
+        print 'land: WARNING — changes outside the landing paths (bystanders; they ride along untouched):'
+        for b in $bystanders { print $"  ($b)" }
+    }
     # A resumable branch (exists, carries commits beyond origin/main) is
     # KEPT; a fresh branch is cut from origin/main. NEVER reset: a dirty
     # tree rides along or the checkout refuses loudly.
