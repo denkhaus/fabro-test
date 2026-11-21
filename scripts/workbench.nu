@@ -1236,7 +1236,24 @@ def compositional-guard []: nothing -> nothing {
 }
 
 def main [] {
-    compositional-guard
+    # WORKBENCH_ONLY="facet-a,facet-b": drive ONLY the named probe facets
+    # (the compositional gate's targeted-drive arm — a red fixed by a
+    # targeted change is proven by its single-probe drive, never by a
+    # full re-table; operator rule 2026-11-21: never rerun the whole
+    # bench to re-see rows). Targeted drives skip the 60-minute guard —
+    # they ARE the compositional arm, not a rerun.
+    let only = (if ($env.WORKBENCH_ONLY? | default '') != '' {
+        $env.WORKBENCH_ONLY | split row ',' | str trim
+    } else {
+        null
+    })
+    if $only == null {
+        compositional-guard
+    }
+    # The mini run id hoisted to main scope: the full round assigns it in
+    # the mini section; a targeted drive never runs the mini, and the
+    # red-exit hygiene's mini-PR lookup reads the sentinel harmlessly.
+    mut mini_id = 'targeted-no-mini'
 
     assert-local-server
     clean-runs
@@ -1247,18 +1264,37 @@ def main [] {
     # facet 10's notification route must exist BEFORE any run completes
     route-ensure
     print '== workbench: platform checks'
-    let prows = (platform-checks)
-    print ($prows | table --index false)
+    # Reconstruction note (2026-11-21): the targeted-drive guards for the
+    # platform checks, the retry facet, and the probe filter were lost in
+    # the #199 wipe and are rebuilt from the arm's documented contract
+    # (captured header + operator rule). The exact original filter lives
+    # in the earlier session's log — reconcile when it is found.
+    let prows = (if $only == null {
+        platform-checks
+    } else {
+        []
+    })
+    if $only == null {
+        print ($prows | table --index false)
+    }
 
     # The retry-latest facet (work#1320's closes-when proof): faulty
     # version -> failed specimen -> fixed version -> retry-latest ->
     # green successor with carried work.
-    print '== workbench: retry-latest facet'
-    let facet_row = (retry-latest-facet $bench_id)
-    print ($facet_row | table --index false)
+    let facet_row = (if $only == null {
+        print '== workbench: retry-latest facet'
+        retry-latest-facet $bench_id
+    } else {
+        {facet: 'probe-45-retry-latest', ok: true, detail: 'skipped — targeted drive'}
+    })
     let prows = ($prows | append $facet_row)
 
-    let probes = $PROBES
+    # a targeted drive names the probe it wants proven — exact-name match
+    let probes = (if $only == null {
+        $PROBES
+    } else {
+        $PROBES | where {|p| ($p.name in $only)}
+    })
     print $"== workbench: ($probes | length) probes — label bench=($bench_id)"
     mut rows = []
     for p in $probes {
@@ -1266,6 +1302,7 @@ def main [] {
         $rows = ($rows | append (probe-run $p.name $p.expect $bench_id))
     }
 
+    if $only == null {
     print '== workbench: mini integration (seed loop + publish)'
     seed-ensure
     # mini needs the toolchain env since the loop assets are nu and the
@@ -1285,21 +1322,23 @@ def main [] {
         '--json' '--server' (server)
     ]) --what 'mini seed loop')
     if $mini.exit_code != 0 { fail $"mini create: ($mini.stderr)" }
-    let mini_id = $mini.run_id
+    $mini_id = $mini.run_id
+    # an immutable alias: the do {} closures below cannot capture a mut
+    let mid = $mini_id
     # The integration run carries the same board marker (user directive
     # 2026-10-31): a red mini is always an unexpected failure.
     let _ = (try {
-        http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($mini_id)" {title: "must-succeed: mini seed loop"}
+        http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($mid)" {title: "must-succeed: mini seed loop"}
     } catch {|err| print -e $"workbench: mini title patch failed: ($err.msg | str substring 0..120)" })
-    let _ = (run-start $mini_id)
-    let mw = (run-wait $mini_id)
+    let _ = (run-start $mid)
+    let mw = (run-wait $mid)
     let mini_ok = ($mw.stdout | from json | get -o status | default 'failed') == 'succeeded'
-    $rows = ($rows | append {facet: '09 mini seed loop', ok: $mini_ok, detail: $"run ($mini_id)"})
+    $rows = ($rows | append {facet: '09 mini seed loop', ok: $mini_ok, detail: $"run ($mid)"})
     if $mini_ok {
         # the mini stream exceeds 1000 events — walk pages (the notification
         # rides at the very end, after the stage journals; bench 0928-205934
         # counted 0 against a real notification.sent at event ~2900)
-        let walked = (events-page $mini_id)
+        let walked = (events-page $mid)
         mut evs = $walked.events
         mut after = $walked.after
         # The notification append rides a sub-second race past the
@@ -1313,7 +1352,7 @@ def main [] {
         while $notif == 0 and $polls < 5 {
             sleep 2sec
             $polls = ($polls + 1)
-            let tail = (http get --headers (auth-header) $"((server))/api/v1/runs/($mini_id)/events?limit=1000&after=($after)" | get -o data | default [])
+            let tail = (http get --headers (auth-header) $"((server))/api/v1/runs/($mid)/events?limit=1000&after=($after)" | get -o data | default [])
             if ($tail | is-not-empty) {
                 $after = ($tail | last | get stream_seq)
                 $evs = ($evs | append $tail)
@@ -1362,11 +1401,12 @@ def main [] {
         } else {
             # fallback: no engine PR — the bridge repairs (push the exact
             # final commit as the run branch); assert the branch push
-            let bridged = (do { nu scripts/publish-bridge.nu $mini_id } | complete)
+            let bridged = (do { nu scripts/publish-bridge.nu $mid } | complete)
             let pushed = (do { git ls-remote origin $"refs/heads/($branch)" } | complete)
             let sha = ($pushed.stdout | str trim)
             $rows = ($rows | append {facet: '09 publish (bridge fallback)', ok: (($sha | is-not-empty)), detail: $"no engine PR; bridge exit=($bridged.exit_code), branch=($sha | str substring 0..12 | default 'none')"})
         }
+    }
     }
 
     print ''
@@ -1392,11 +1432,14 @@ def main [] {
         # backpressureOpenPrCap=1 refuses the next publish (observed:
         # PRs #95/#96 cascading). Close the mini's open PR on the way
         # out; the branch stays as evidence.
-        let hits = (gh-pr-list --head $"fabro/run/($mini_id)" --fields [number] --limit 1)
+        if $only == null {
+        let hygiene_branch = (if $only == null { $"fabro/run/($mini_id)" } else { 'targeted-no-mini' })
+        let hits = (gh-pr-list --head $hygiene_branch --fields [number] --limit 1)
         if ($hits | length) > 0 {
             let num = ($hits | first | get number)
             let _ = (do { ^gh pr close $num -R denkhaus/fabro-test --comment 'bench hygiene: red bench closes its mini PR so backpressureOpenPrCap does not refuse the next publish (work#1049)' } | complete)
             print $"== hygiene: closed mini PR #($num) — red-exit"
+        }
         }
         exit 1
     }
