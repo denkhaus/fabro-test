@@ -52,7 +52,7 @@ Speculative candidates and unseeded Worth-exploring knowledge become expertise r
       --content "<problem — solution — files>" \
       --files "<comma-separated paths>"
 
-Type guide: a candidate rejected with a load-bearing reason is `decision`; a suspected-but-unproven shape is `pattern`; friction evidence awaiting a seed is `failure`. When all records are in, `mulch sync` validates, stages, and commits.
+Type guide: a candidate rejected with a load-bearing reason is `decision`; a suspected-but-unproven shape is `pattern`; friction evidence awaiting a seed is `failure`. When all records are in, `mulch sync` validates, stages, and commits — IN REPOS WITH PROTECTED MAIN, replace `mulch sync` with `mulch validate` + a landing of `.mulch/` through the repo's own PR dance (a direct commit never reaches main; the skill's sync step assumed a writable branch).
 
 Done when: every recorded candidate reports a record id and `mulch sync` ran clean.
 
