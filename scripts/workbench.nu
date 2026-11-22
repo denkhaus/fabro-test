@@ -16,7 +16,8 @@ use lib/bench.nu *
 source retry-latest-facet.nu
 
 # Probe registry: default expectation per workflow (probe-06 expects the
-# human_needed parking of its guard kill, probe-09 expects failure).
+# human_needed parking of its guard kill; probe-09 expects SUCCESS under
+# ADR-0051 — the denied write quarantines and is named, the run lives).
 const PROBES = [
     [name expect];
     [probe-01-schema succeeded]
@@ -27,7 +28,7 @@ const PROBES = [
     [probe-06-guards human_needed]
     [probe-07-artifacts succeeded]
     [probe-08-interview succeeded]
-    [probe-09-envelope-deny failed]
+    [probe-09-envelope-deny succeeded]
     [probe-11-admission-deny refused]
     # fabro-70af residual probes: the preamble family enforced (PART 2b,
     # PR #350 salvage) — green proves the enforcement end to end.
@@ -796,6 +797,19 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         let ok26c = ($split and $unpublished and ($transition == 'succeeded'))
         let branch_state = (if $unpublished { 'none' } else { 'pushed' })
         return {facet: $name, ok: $ok26c, detail: ($detail + $" | terminal=($transition) branch=($branch_state) reason=($reason)")}
+    }
+    if $ok and $name == 'probe-09-envelope-deny' {
+        # ADR-0051 (work#1624): the denied write no longer fails the run
+        # — the checkpoint QUARANTINES it and names it. The facet's
+        # substance: the run succeeded AND the run's records name the
+        # quarantined paths (stage_envelope_quarantined). A succeeded
+        # run without the naming is a silent quarantine — red.
+        let walked = (events-page $run_id)
+        let notice_named = (($walked.events | to json) | str contains 'stage_envelope_quarantined')
+        if not $notice_named {
+            return {facet: $name, ok: false, detail: ($detail + " | the run succeeded but NO quarantine notice was recorded — a silent quarantine defeats the deferral visibility")}
+        }
+        return {facet: $name, ok: true, detail: ($detail + " | the denied write quarantined and named (ADR-0051)")}
     }
     if $ok and $name == 'probe-42-observation-links' {
         # ADR-0038 stage 3, the fork.32 batch's uncovered half: the link
