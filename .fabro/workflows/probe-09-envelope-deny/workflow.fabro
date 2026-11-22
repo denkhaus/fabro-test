@@ -1,5 +1,5 @@
 digraph Probe09Deny {
-    graph [goal="An out-of-scope write fails the stage with an envelope violation", default_max_retries=0, stall_timeout="5m"]
+    graph [goal="An out-of-scope write is quarantined from the commit and named in the outcome (ADR-0051) — the run succeeds", default_max_retries=0, stall_timeout="5m"]
     start [shape=Mdiamond]
     exit  [shape=Msquare]
     writer [
