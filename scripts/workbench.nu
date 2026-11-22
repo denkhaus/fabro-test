@@ -530,8 +530,13 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     let env_id = (if $name == 'probe-43-env-build' { 'probe43-build' } else { 'toolchain' })
     # expect rides as a LABEL: a failed run in the list must be recognizable
     # as red-by-design from the outside (bench probes 06/09/15 fail on purpose)
+    # The title derives FROM THE TABLE and is born right (ADR-0051,
+    # user directive 2026-11-22: create --title; the board shows the
+    # expectation from the first render — no post-create patch window).
+    let title = (if $expect == 'succeeded' { $"must-succeed: ($name)" } else if $expect == 'human_needed' { $"must-need-human: ($name)" } else { $"must-fail: ($name)" })
     let created = (run-create [
         'create' $name
+        '--title' $title
         '--label' $"bench=($bench_id)"
         '--label' $"expect=($expect)"
         '--environment' $env_id
@@ -558,24 +563,6 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     # distinguishable on the board at a glance — the expect LABEL stays,
     # but titles are what the board shows. Admission-refused probes have
     # no run to title.
-    if ($run_id | is-not-empty) and ($expect in ['succeeded' 'failed' 'human_needed']) {
-        # The title derives FROM THE TABLE (user directive 2026-11-22:
-        # one declarative source — name + expect — and the prefix is
-        # load-bearing): a probe run without its must-* prefix breaks
-        # the board's expectation vocabulary, so a failed title set is
-        # a HARD facet failure, never a warning.
-        let prefix = (if $expect == 'succeeded' { 'must-succeed' } else if $expect == 'human_needed' { 'must-need-human' } else { 'must-fail' })
-        let title = $"($prefix): ($name)"
-        let titled = (try {
-            http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)" {title: $title}
-        } catch {|err|
-            print -e $"workbench: title set failed for ($name): ($err.msg | str substring 0..120)"
-            null
-        })
-        if ($titled | get -o title | default '') != $title {
-            return {facet: $name, ok: false, detail: $"the title prefix is missing — the board expectation vocabulary breaks (wanted: ($title))"}
-        }
-    }
     if ($run_id | is-empty) { return {facet: $name, ok: false, detail: 'no run_id'} }
     let started = (run-start $run_id)
     if $started.exit_code != 0 {
