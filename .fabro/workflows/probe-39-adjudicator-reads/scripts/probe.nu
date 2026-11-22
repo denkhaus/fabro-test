@@ -112,8 +112,17 @@ def main []: nothing -> nothing {
     }
 
     # the radius/comments target: the proof project's first open item
-    # (probe-31's proven call shape; proof-ensure keeps items open)
+    # (probe-31's proven call shape; proof-ensure keeps items open).
+    # The bench's gh-side writes (probe-25's target retirement, the
+    # ensure reopens) bypass the server-side invalidation (ADR-0050):
+    # refresh the project's materialized view BEFORE the read, or the
+    # precondition answers stale-empty (the 2026-11-22 freeze round).
     let bin = ($env.FABRO_BIN? | default 'fabro')
+    let rf = (do { ^$bin work --server $sock refresh --project $SCOPED_PROJECT } | complete)
+    if $rf.exit_code != 0 {
+        print -e ($rf.stderr | str trim | str substring 0..400)
+        fail 'the work view refresh failed — the precondition read would answer stale'
+    }
     let listed = (do { ^$bin work --server $sock list --project $SCOPED_PROJECT --limit 1 --json } | complete)
     if $listed.exit_code != 0 {
         print -e ($listed.stderr | str trim | str substring 0..400)

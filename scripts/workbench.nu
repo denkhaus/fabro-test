@@ -1100,6 +1100,16 @@ def proof-ensure []: nothing -> nothing {
             if $re.exit_code == 0 { print $"proof-ensure: reopened denkhaus/work#($n)" }
         }
     }
+    # The gh edits above are FOREIGN edits at the forge (ADR-0050):
+    # they bypass the server-side invalidation, so the materialized
+    # view would answer stale/empty — probe-39's precondition read
+    # exactly that empty on 2026-11-22 while the forge held nine open
+    # items. Refresh the project's whole universe through the server.
+    let rf = (do { ^$FABRO work --server (server) refresh --project 'fabro-proof' } | complete)
+    if $rf.exit_code != 0 {
+        print -e $"proof-ensure: the work view refresh failed: ($rf.stderr | str trim | str substring 0..200)"
+        exit 1
+    }
     let claims = (try { http get --headers (auth-header) $"(server)/api/v1/projects/fabro-proof/claims" } catch {|err| {data: []} })
     let live = ($claims | get -o data | default [] | length)
     if $live > 0 {
@@ -1319,7 +1329,18 @@ def main [] {
     mut rows = []
     for p in $probes {
         print $"-- ($p.name)"
-        $rows = ($rows | append (probe-run $p.name $p.expect $bench_id))
+        let row = (probe-run $p.name $p.expect $bench_id)
+        $rows = ($rows | append $row)
+        # FAIL-FAST (user directive 2026-11-22, after the probe-39 red
+        # ran four more probes and the mini: continuing past a red
+        # facet wastes the round — the compositional arm re-drives the
+        # red facets after the fix). The known-red regressions
+        # (fabro-1a41 / fabro-51ad) are expected findings, not stops.
+        if not $row.ok and not ($p.name in ['probe-03-tools' 'probe-06-guards']) {
+            print -e $"workbench: SUITE ABORT — ($p.name) red: ($row.detail | str substring 0..160)"
+            print -e "fix the facet, then re-drive ONLY the red ones: WORKBENCH_ONLY=($p.name) just probe ($p.name) — the green table stays valid evidence"
+            exit 1
+        }
     }
 
     print '== workbench: mini integration (seed loop + publish)'
