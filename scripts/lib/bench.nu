@@ -105,8 +105,15 @@ export def run-start [run_id: string]: nothing -> record {
     do { ^$FABRO start $run_id --server (server) } | complete
 }
 
-export def run-wait [run_id: string]: nothing -> record {
-    do { ^$FABRO wait $run_id --json --server (server) } | complete
+export def run-wait [run_id: string, --budget-secs: int = 1800]: nothing -> record {
+    # The hard per-run deadline (the 2026-11-22 hang directive, user:
+    # a run over budget aborts the whole suite). rc 124 is coreutils
+    # timeout's deadline convention; the caller checks it and exits
+    # the suite loudly — a hung run must never freeze the gate. The
+    # inner command passes to timeout WITHOUT the caret (the escape is
+    # command-position syntax; in argument position it becomes a
+    # literal, and timeout died on '^$FABRO: Permission denied').
+    do { ^timeout --kill-after=15s $"($budget_secs)s" $FABRO wait $run_id --json --server (server) } | complete
 }
 
 # The tight triplet: create -> start -> wait. Fails loudly on create and
@@ -125,7 +132,14 @@ export def run-lifecycle [args: list<string>, --what: string = 'run']: nothing -
     if $started.exit_code != 0 {
         fail $"($what) start failed: ($started.stderr | str substring 0..200)"
     }
-    { run_id: $created.run_id, waited: (run-wait $created.run_id) }
+    let waited = (run-wait $created.run_id)
+    if $waited.exit_code == 124 {
+        # The hard per-run deadline fired (the 2026-11-22 hang
+        # directive): a hung run aborts the invoking suite loudly —
+        # fail here and the whole bench exits red, never frozen.
+        fail $"($what) SUITE ABORT — run ($created.run_id) exceeded the 30-minute wait budget; a hung run fails the bench loudly, never freezes the gate"
+    }
+    { run_id: $created.run_id, waited: $waited }
 }
 
 # The events walk: the stream exceeds one page (the mini's stream carried
