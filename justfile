@@ -45,8 +45,12 @@ probes:
 # twice (fork.31, fork.33). Red rounds KEEP their table (5098a6c
 # semantics, restored 2026-11-21: the &&/|| rm deleted exactly the
 # captured red table); the guard's exit-3 refusal moves nothing.
+# Refusal exits (2 server guard, 3 compositional gate) rotate NOTHING —
+# the compositional guard reads .workbench-last.log's mtime, so a
+# refusing round must never rewrite that file (work#1602: a refusal
+# round faked a fresh full bench and wedged the next window's gate).
 workbench:
-    @bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-current.log'; rc=$$?; if [ $$rc -eq 3 ]; then mv -f .workbench-current.log .workbench-red-$$(date +'%m%d-%H%M%S').log; else mv -f .workbench-current.log .workbench-last.log; fi; exit $$rc
+    @bash -c 'set -o pipefail; nu scripts/workbench.nu | tee .workbench-current.log'; rc=$?; if [ $rc -eq 1 ]; then mv -f .workbench-current.log .workbench-red-$(date +'%m%d-%H%M%S').log; elif [ $rc -eq 0 ]; then mv -f .workbench-current.log .workbench-last.log; fi; exit $rc
 
 # The deliberate full bench (the compositional guard's explicit door).
 bench-full:
