@@ -582,6 +582,12 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     }
 
     let waited = (run-wait $run_id)
+    if $waited.exit_code == 124 {
+        # The hard per-run deadline fired (the 2026-11-22 hang
+        # directive, user: a run over budget aborts the whole suite).
+        print -e $"workbench: SUITE ABORT — run ($run_id) exceeded the 30-minute wait budget; a hung run fails the bench loudly, never freezes the gate"
+        exit 1
+    }
     let info = (try { $waited.stdout | from json } catch { null })
     if $info == null { return {facet: $name, ok: false, detail: 'no terminal json'} }
     let status = ($info | get -o status | default '?')
@@ -782,8 +788,8 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
         # known-flaky surface (server-PR title generation, the mini
         # facet owns it).
         if $name == 'probe-26-gate-bounce' {
-            let bridge = (do { nu scripts/publish-bridge.nu $run_id } | complete)
-            let pushed = (do { git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
+            let bridge = (do { ^timeout --kill-after=15s 240s nu scripts/publish-bridge.nu $run_id } | complete)
+            let pushed = (do { ^timeout --kill-after=15s 240s git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
             let branch_sha = ($pushed.stdout | str trim)
             let agree = ($transition == 'succeeded')
             let published = ($branch_sha | is-not-empty)
@@ -791,7 +797,7 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
             let short = (if $published { $branch_sha | str substring 0..12 } else { 'none' })
             return {facet: $name, ok: $ok26, detail: ($detail + $" | terminal=($transition) branch=($short) bridge=($bridge.exit_code) reason=($reason)")}
         }
-        let pushed_c = (do { git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
+        let pushed_c = (do { ^timeout --kill-after=15s 240s git ls-remote origin $"refs/heads/fabro/run/($run_id)" } | complete)
         let split = ($reason | str contains 'workflow_error')
         let unpublished = (($pushed_c.stdout | str trim) | is-empty)
         let ok26c = ($split and $unpublished and ($transition == 'succeeded'))
@@ -1199,6 +1205,7 @@ def seed-ensure []: nothing -> nothing {
 # probe-06-guards (fabro-51ad) — a red exit there is the expected finding.
 def "main probe" [name: string, --expect: string]: nothing -> nothing {
     assert-local-server
+    refresh-git-credential
     let known = ($PROBES | where name == $name)
     let exp = if $expect != null { $expect } else if ($known | is-empty) { 'succeeded' } else { $known | first | get expect }
     let bench_id = ('single-' + (date now | format date '%m%d-%H%M%S'))
@@ -1235,6 +1242,28 @@ def compositional-guard []: nothing -> nothing {
     }
 }
 
+# The git credential refresh (the 2026-11-22 probe-26 freeze, user
+# directive: the bench refreshes the store itself). The post-run checks
+# (git ls-remote, the publish bridge) resolve github credentials through
+# the gopass helper; a locked store hangs the helper non-interactively —
+# the bench froze 31 minutes at probe-26 on exactly this. Refresh the
+# chain under a hard timeout: a locked store fails the invocation NOW
+# with the teaching line, never mid-run.
+def refresh-git-credential []: nothing -> nothing {
+    print 'workbench: refreshing the git credential chain (gopass helper)...'
+    let filled = (do {
+        "protocol=https\nhost=github.com\n\n" | ^timeout --kill-after=10s 30s git credential fill
+    } | complete)
+    if $filled.exit_code == 124 {
+        print -e 'workbench: the gopass store is LOCKED — the credential fill timed out. Run a blocking `gopass show` on any secret (the store unlocks for its TTL), then re-run the bench. The post-run git checks hang on a locked store; the bench refuses to start into that freeze.'
+        exit 1
+    }
+    if $filled.exit_code != 0 or not ($filled.stdout | str contains 'password=') {
+        print -e $"workbench: the git credential chain answered no password, rc=($filled.exit_code) — the post-run git checks would hang or fail. Fix the helper — credential.helper=gopass — and re-run."
+        exit 1
+    }
+}
+
 def main [] {
     # WORKBENCH_ONLY="facet-a,facet-b": drive ONLY the named probe facets
     # (the compositional gate's targeted-drive arm — a red fixed by a
@@ -1256,6 +1285,7 @@ def main [] {
     mut mini_id = 'targeted-no-mini'
 
     assert-local-server
+    refresh-git-credential
     clean-runs
     let bench_id = (date now | format date '%m%d-%H%M%S')
     print $"== workbench: bench=($bench_id)"
@@ -1391,8 +1421,8 @@ def main [] {
         } else {
             # fallback: no engine PR — the bridge repairs (push the exact
             # final commit as the run branch); assert the branch push
-            let bridged = (do { nu scripts/publish-bridge.nu $mid } | complete)
-            let pushed = (do { git ls-remote origin $"refs/heads/($branch)" } | complete)
+            let bridged = (do { ^timeout --kill-after=15s 240s nu scripts/publish-bridge.nu $mid } | complete)
+            let pushed = (do { ^timeout --kill-after=15s 240s git ls-remote origin $"refs/heads/($branch)" } | complete)
             let sha = ($pushed.stdout | str trim)
             $rows = ($rows | append {facet: '09 publish (bridge fallback)', ok: (($sha | is-not-empty)), detail: $"no engine PR; bridge exit=($bridged.exit_code), branch=($sha | str substring 0..12 | default 'none')"})
         }
