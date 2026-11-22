@@ -559,15 +559,21 @@ def probe-run [name: string, expect: string, bench_id: string]: nothing -> recor
     # but titles are what the board shows. Admission-refused probes have
     # no run to title.
     if ($run_id | is-not-empty) and ($expect in ['succeeded' 'failed' 'human_needed']) {
+        # The title derives FROM THE TABLE (user directive 2026-11-22:
+        # one declarative source — name + expect — and the prefix is
+        # load-bearing): a probe run without its must-* prefix breaks
+        # the board's expectation vocabulary, so a failed title set is
+        # a HARD facet failure, never a warning.
         let prefix = (if $expect == 'succeeded' { 'must-succeed' } else if $expect == 'human_needed' { 'must-need-human' } else { 'must-fail' })
+        let title = $"($prefix): ($name)"
         let titled = (try {
-            http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)" {title: $"($prefix): ($name)"}
+            http patch --headers (auth-header) -t 'application/json' $"((server))/api/v1/runs/($run_id)" {title: $title}
         } catch {|err|
-            print -e $"workbench: title patch failed for ($name): ($err.msg | str substring 0..120)"
+            print -e $"workbench: title set failed for ($name): ($err.msg | str substring 0..120)"
             null
         })
-        if ($titled | get -o title | default '') != $"($prefix): ($name)" {
-            print -e $"workbench: title prefix not confirmed for ($name) — the board loses the must-($expect) marker"
+        if ($titled | get -o title | default '') != $title {
+            return {facet: $name, ok: false, detail: $"the title prefix is missing — the board expectation vocabulary breaks (wanted: ($title))"}
         }
     }
     if ($run_id | is-empty) { return {facet: $name, ok: false, detail: 'no run_id'} }
@@ -1104,11 +1110,16 @@ def proof-ensure []: nothing -> nothing {
     # they bypass the server-side invalidation, so the materialized
     # view would answer stale/empty — probe-39's precondition read
     # exactly that empty on 2026-11-22 while the forge held nine open
-    # items. Refresh the project's whole universe through the server.
-    let rf = (do { ^$FABRO work --server (server) refresh --project 'fabro-proof' } | complete)
-    if $rf.exit_code != 0 {
-        print -e $"proof-ensure: the work view refresh failed: ($rf.stderr | str trim | str substring 0..200)"
-        exit 1
+    # items. Refresh SURGICALLY per item (the whole-universe refresh
+    # overruns the server's 30s request budget — the 21:54 drive died
+    # on it): the radius/comments legs read the first open item, and
+    # #3 is guaranteed open by the reopens above.
+    for n in [3 4] {
+        let rf = (do { ^$FABRO work --server (server) refresh --project 'fabro-proof' --item $"denkhaus/work#($n)" } | complete)
+        if $rf.exit_code != 0 {
+            print -e $"proof-ensure: the item refresh failed for denkhaus/work#($n): ($rf.stderr | str trim | str substring 0..200)"
+            exit 1
+        }
     }
     let claims = (try { http get --headers (auth-header) $"(server)/api/v1/projects/fabro-proof/claims" } catch {|err| {data: []} })
     let live = ($claims | get -o data | default [] | length)
