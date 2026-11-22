@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .workbench-last.log
+
+# The red-round tables (kept by the recipe, bench-internal evidence)
+.workbench-red-*
