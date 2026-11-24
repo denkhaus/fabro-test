@@ -1,5 +1,5 @@
 #!/usr/bin/env nu
-# retry-latest facet: the DELIBERATE fault (round 1124-225350,
+# retry-latest facet: the DELIBERATE fault (round single-1124-235245,
 # work#1320). Template data, not a repo script: the facet loads it and
 # substitutes the round id (the version is content-addressed, so every
 # round mints fresh versions). The fault is PARSE-time — nu rejects
