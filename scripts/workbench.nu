@@ -1274,8 +1274,14 @@ def compositional-guard []: nothing -> nothing {
 def refresh-git-credential []: nothing -> nothing {
     print 'workbench: refreshing the git credential chain (gopass helper)...'
     let filled = (do {
-        "protocol=https\nhost=github.com\n\n" | ^timeout --kill-after=10s 30s git credential fill
+        "protocol=https\nhost=github.com\nusername=denkhaus\n\n" | ^timeout --kill-after=10s 30s git credential fill
     } | complete)
+    # The username hint is part of the query (sprint-103): the gopass
+    # store holds several github.com entries and the helper answers
+    # "too many entries" without it — the fill then returns no password
+    # and the bench refuses to start (2026-11-27). The machine-side
+    # git config hint (credential.https://github.com.username) is the
+    # other half; this query carries its own so a fresh checkout works.
     if $filled.exit_code == 124 {
         print -e 'workbench: the gopass store is LOCKED — the credential fill timed out. Run a blocking `gopass show` on any secret (the store unlocks for its TTL), then re-run the bench. The post-run git checks hang on a locked store; the bench refuses to start into that freeze.'
         exit 1
